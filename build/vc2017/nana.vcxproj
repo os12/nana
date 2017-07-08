@@ -72,14 +72,14 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IncludePath>..\..\include;$(IncludePath)</IncludePath>
-    <OutDir>../bin/</OutDir>
-    <IntDir>..\..\..\temp\$(ProjectName)\$(PlatformToolset)_$(Configuration)_$(PlatformShortName)\</IntDir>
+    <OutDir>$(SolutionDir)_$(Configuration)\lib\</OutDir>
+    <IntDir>$(SolutionDir)_$(Configuration)\obj\$(ProjectName)\</IntDir>
     <TargetName>$(ProjectName)_$(PlatformToolset)_$(Configuration)_$(PlatformShortName)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>..\..\include;$(IncludePath)</IncludePath>
-    <OutDir>../bin/</OutDir>
-    <IntDir>..\..\..\temp\$(ProjectName)\$(PlatformToolset)_$(Configuration)_$(PlatformShortName)\</IntDir>
+    <OutDir>$(SolutionDir)_$(Configuration)\lib\</OutDir>
+    <IntDir>$(SolutionDir)_$(Configuration)\obj\$(ProjectName)\</IntDir>
     <TargetName>$(ProjectName)_$(PlatformToolset)_$(Configuration)_$(PlatformShortName)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
