@@ -45,3 +45,5 @@ cmake_install.cmake
 
 *.db
 *.opendb
+
+build/vc2017/.vs
