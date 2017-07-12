@@ -41,6 +41,15 @@
     <Filter Include="Sources\threads">
       <UniqueIdentifier>{c1cdf46a-519f-422a-947f-39e173045414}</UniqueIdentifier>
     </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{36bcf98e-d1ff-4076-9ccc-7f209aa43c60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\gui">
+      <UniqueIdentifier>{94c4eb85-004a-4bcb-8589-80a3c6d0811d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\gui\widgets">
+      <UniqueIdentifier>{e93e6bf6-b22b-466b-b59f-47195b363772}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\source\any.cpp">
@@ -283,5 +292,79 @@
     <ClCompile Include="..\..\source\gui\wvl.cpp">
       <Filter>Sources\gui</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\include\nana\gui\widgets\button.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\categorize.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\checkbox.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\combox.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\date_chooser.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\float_listbox.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\form.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\frame.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\group.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\label.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\listbox.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\menu.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\menubar.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\panel.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\picture.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\progress.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\scroll.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\slider.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\spinbox.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\tabbar.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\textbox.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\toolbar.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\treebox.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\nana\gui\widgets\widget.hpp">
+      <Filter>include\gui\widgets</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
