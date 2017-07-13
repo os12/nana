@@ -1456,6 +1456,10 @@ namespace nana{	namespace widgets
 					select_.ignore_press = (arg_focus::reason::mouse_press == arg.focus_reason);
 				}
 			}
+
+			// Reset the selection as it is sticky in the "double click" path.
+			if (!arg.getting)
+				select(false);
 			show_caret(arg.getting);
 			reset_caret();
 			return renderred;
