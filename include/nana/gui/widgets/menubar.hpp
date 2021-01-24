@@ -1,7 +1,7 @@
 /*
  *	A Menubar implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2009-2014 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2009-2018 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -34,36 +34,14 @@ namespace nana
 				color_proxy border_highlight{ colors::highlight };
 			};
 
-			class item_renderer
-			{
-			public:
-				enum class state
-				{
-					normal, highlighted, selected
-				};
-
-				using graph_reference = paint::graphics&;
-				using scheme = ::nana::drawerbase::menubar::scheme;
-
-				item_renderer(window, graph_reference);
-				virtual void background(const point&, const ::nana::size&, state);
-				virtual void caption(const point&, const native_string_type&);
-				scheme *scheme_ptr() const { return scheme_ptr_; };
-			private:
-				graph_reference graph_;
-				scheme *scheme_ptr_;
-			};
-
 			class trigger
 				: public drawer_trigger
 			{
-				class itembase;
+				struct essence;
 			public:
 				trigger();
 				~trigger();
-				nana::menu* push_back(const std::string&);
-				nana::menu* at(size_t) const;
-				std::size_t size() const;
+				essence& ess() const;
 			private:
 				void attached(widget_reference, graph_reference)	override;
 				void refresh(graph_reference)	override;
@@ -76,43 +54,14 @@ namespace nana
 				void key_release(graph_reference, const arg_keyboard&)	override;
 				void shortkey(graph_reference, const arg_keyboard&)	override;
 			private:
-				void _m_move(bool to_left);
-				bool _m_popup_menu();
-				void _m_total_close();
-				bool _m_close_menu();
-				std::size_t _m_item_by_pos(const ::nana::point&);
-				bool _m_track_mouse(const ::nana::point&);
+				void _m_move(graph_reference, bool to_left);
 			private:
-				widget *widget_;
-				paint::graphics	*graph_;
-				
-				itembase*	items_;
-
-				struct state_type
-				{
-					enum behavior_t
-					{
-						behavior_none, behavior_focus, behavior_menu,
-					};
-
-					state_type();
-
-					std::size_t active;
-					behavior_t behavior;
-
-					bool menu_active;
-					bool passive_close;
-
-					bool nullify_mouse;
-
-					nana::menu *menu;
-					nana::point mouse_pos;
-				}state_;
+				essence * const ess_;
 			};
 		}//end namespace menubar
 	}//end namespace drawerbase
 
-	  /// \brief A toolbar at the top of window for popuping menus.
+	  /// \brief A toolbar at the top of window for pop-upping menus.
 	  ///
 	  /// The widget sets as shortkey the character behind the first of & in the text, for the item. e.g. "File(&F)" or "&File".
 	class menubar
@@ -126,6 +75,17 @@ namespace nana
 		menu& push_back(const std::string&);	///< Appends a new (empty) menu.
 		menu& at(size_t index) const;		    ///< Gets the menu specified by index.
 		std::size_t length() const;		        ///< Number of menus.
+		void clear();							///< Removes all the menus.
+		
+		/// Deselects the menu
+		/**
+		 * If a menu is popped up, the menu deselects the item and close the pop-upped menu.
+		 * @return true if an item is deselected, false otherwise.
+		 */
+		bool cancel();
+
+		/// Determines the mouse is hovered on the menubar or its popped menu.
+		bool hovered() const;
 	private:
 		::nana::event_handle evt_resized_{nullptr};
 	};//end class menubar

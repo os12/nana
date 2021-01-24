@@ -1,13 +1,13 @@
-/*
+/**
  *	Basic Types definition
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2018 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0. 
  *	(See accompanying file LICENSE_1_0.txt or copy at 
  *	http://www.boost.org/LICENSE_1_0.txt)
  *
- *	@file: nana/basic_types.hpp
+ *	@file nana/basic_types.hpp
  */
 
 #ifndef NANA_BASIC_TYPES_HPP
@@ -74,7 +74,7 @@ namespace nana
 
 	namespace detail
 	{
-		struct drawable_impl_type;	//declearation, defined in platform_spec.hpp
+		struct drawable_impl_type;	//declaration, defined in platform_spec.hpp
 	}
 
 	namespace paint
@@ -275,7 +275,7 @@ namespace nana
 		yellow	= 0xFFFF00,
 		yellow_green = 0x9acd32,
 
-		//temporary defintions, these will be replaced by color schema
+		//temporary definitions, these will be replaced by color schema
 		button_face_shadow_start = 0xF5F4F2,
 		button_face_shadow_end = 0xD5D2CA,
 		button_face = 0xD4D0C8 , //,light_cyan
@@ -312,7 +312,14 @@ namespace nana
 		/// @param lightness  in range of [0, 1]
 		color& from_hsl(double hue, double saturation, double lightness);	///< immutable alpha channel
 
-		color blend(const color& blending_color, double alpha) const;
+		/// Blends color
+		/**
+		 * Returns a color which is blended as this * (1 - fade_rate) + blending_color * fade_rate
+		 * @param blending_color Color to blend
+		 * @param fade_rate Blending rate for blending_color
+		 * @return a blended color
+		 */
+		color blend(const color& blending_color, double fade_rate) const;
 
 		/// Determines whether the color is completely transparent.
 		bool invisible() const;
@@ -418,7 +425,7 @@ namespace nana
 		size(value_type width, value_type height);
 
 		bool empty() const;		///< true if width * height == 0
-		bool is_hit(const point&) const;	///< Assume it is a rectangle at (0,0), and check whether a specified position is in the rectange.
+		bool is_hit(const point&) const;	///< Assume it is a rectangle at (0,0), and check whether a specified position is in the rectangle.
 		size& shift();
 
 		bool operator==(const size& rhs) const;

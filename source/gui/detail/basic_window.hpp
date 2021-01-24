@@ -1,10 +1,10 @@
 /**
  *	A Basic Window Widget Definition
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
- *	Distributed under the Boost Software License, Version 1.0. 
- *	(See accompanying file LICENSE_1_0.txt or copy at 
+ *	Distributed under the Boost Software License, Version 1.0.
+ *	(See accompanying file LICENSE_1_0.txt or copy at
  *	http://www.boost.org/LICENSE_1_0.txt)
  *
  *	@file nana/gui/detail/basic_window.hpp
@@ -14,11 +14,11 @@
 #ifndef NANA_GUI_DETAIL_BASIC_WINDOW_HPP
 #define NANA_GUI_DETAIL_BASIC_WINDOW_HPP
 #include <nana/push_ignore_diagnostic>
-#include "drawer.hpp"
-#include "events_holder.hpp"
-#include "widget_geometrics.hpp"
-#include "widget_content_measurer_interface.hpp"
-#include "widget_notifier_interface.hpp"
+#include <nana/gui/detail/drawer.hpp>
+#include <nana/gui/detail/events_holder.hpp>
+#include <nana/gui/detail/widget_geometrics.hpp>
+#include <nana/gui/detail/widget_content_measurer_interface.hpp>
+#include <nana/gui/detail/widget_notifier_interface.hpp>
 #include <nana/basic_types.hpp>
 #include <nana/system/platform.hpp>
 #include <nana/gui/effects.hpp>
@@ -55,6 +55,7 @@ namespace detail
 		void dimension(const size& s) override;
 		void visible(bool visibility) override;
 		bool visible() const override;
+		bool activated() const override;
 	private:
 		basic_window * owner_;
 		point	position_;
@@ -78,7 +79,7 @@ namespace detail
 	};
 
 
-	/// a window data structure descriptor 
+	/// a window data structure descriptor
 	struct basic_window
 		: public events_holder
 	{
@@ -115,10 +116,6 @@ namespace detail
 		/// bind a native window and baisc_window
 		void bind_native_window(native_window_type, unsigned width, unsigned height, unsigned extra_width, unsigned extra_height, paint::graphics&);
 
-#ifndef WIDGET_FRAME_DEPRECATED
-		void frame_window(native_window_type);
-#endif
-
 		bool is_ancestor_of(const basic_window* wd) const;
 		bool visible_parents() const;
 		bool displayed() const;
@@ -130,6 +127,9 @@ namespace detail
 		basic_window * seek_non_lite_widget_ancestor() const;
 
 		void set_action(mouse_action);
+
+		/// Only refresh when the root of window is in lazy-updating mode
+		bool try_lazy_update(bool try_refresh);
 	public:
 		/// Override event_holder
 		bool set_events(const std::shared_ptr<general_events>&) override;
@@ -138,7 +138,7 @@ namespace detail
 		void _m_init_pos_and_size(basic_window* parent, const rectangle&);
 		void _m_initialize(basic_window* parent);
 	public:
-#if defined(NANA_LINUX) || defined(NANA_MACOS)
+#if defined(NANA_POSIX)
 		point	pos_native;
 #endif
 		point	pos_root;	///< coordinates of the root window
@@ -178,7 +178,8 @@ namespace detail
 			bool ignore_menubar_focus	: 1;	///< A flag indicates whether the menubar sets the focus.
 			bool ignore_mouse_focus		: 1;	///< A flag indicates whether the widget accepts focus when clicking on it
 			bool space_click_enabled : 1;		///< A flag indicates whether enable mouse_down/click/mouse_up when pressing and releasing whitespace key.
-			unsigned Reserved	:18;
+			bool draggable : 1;
+			unsigned Reserved : 17;
 			unsigned char tab;		///< indicate a window that can receive the keyboard TAB
 			mouse_action	action;
 			mouse_action	action_before;
@@ -201,27 +202,19 @@ namespace detail
 			effects::bground_interface * bground;
 			double	bground_fade_rate;
 		}effect;
-		
+
 		struct other_tag
 		{
-#ifndef WIDGET_FRAME_DEPRECATED
-			struct	attr_frame_tag
-			{
-				native_window_type container{nullptr};
-				std::vector<native_window_type> attach;
-			};
-#endif
-
 			struct	attr_root_tag
 			{
-#ifndef WIDGET_FRAME_DEPRECATED
-				container	frames;	///< initialization is null, it will be created while creating a frame widget. Refer to WindowManager::create_frame
-#endif
+				bool ime_enabled{ false };
+				bool lazy_update{ false };	///< Indicates whether the window is in lazy-updating mode.
+
+				container	update_requesters;	///< Container for lazy-updating requesting windows.
 				container	tabstop;
 				std::vector<edge_nimbus_action> effects_edge_nimbus;
 				basic_window*	focus{nullptr};
 				basic_window*	menubar{nullptr};
-				bool			ime_enabled{false};
 				cursor			state_cursor{nana::cursor::arrow};
 				basic_window*	state_cursor_window{ nullptr };
 
@@ -233,13 +226,11 @@ namespace detail
 											///< if the active_window is null, the parent of this window keeps focus.
 			paint::graphics glass_buffer;	///< if effect.bground is avaiable. Refer to window_layout::make_bground.
 			update_state	upd_state;
+			dragdrop_status	dnd_state{ dragdrop_status::not_ready };
 
 			union
 			{
 				attr_root_tag * root;
-#ifndef WIDGET_FRAME_DEPRECATED
-				attr_frame_tag * frame;
-#endif
 			}attribute;
 
 			other_tag(category::flags);
@@ -247,7 +238,7 @@ namespace detail
 		}other;
 
 		native_window_type	root;		    ///< root Window handle
-		unsigned			thread_id;		///< the identifier of the thread that created the window.
+		thread_t			thread_id;		///< the identifier of the thread that created the window.
 		unsigned			index;
 		container			children;
 	};

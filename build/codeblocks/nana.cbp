@@ -14,8 +14,8 @@
 				<Option compiler="gcc" />
 				<Option createDefFile="1" />
 				<Compiler>
-					<Add option="-std=c++11" />
 					<Add option="-Wall" />
+					<Add option="-std=c++11" />
 					<Add option="-g" />
 					<Add directory="../../include" />
 					<Add directory="../../extrlib/mingw" />
@@ -40,15 +40,6 @@
 				</Linker>
 			</Target>
 		</Build>
-		<Compiler>
-			<Add option="-std=c++11" />
-			<Add option="-D_enable_std_make_unique" />
-			<Add option="-D_WIN32_WINNT=0x0501" />
-			<Add option="-D_WIN32_WINNT_WINXP=0x0501" />
-			<Add option="-D_WIN32_WINNT_VISTA=0x0600" />
-			<Add option="-D_WIN32_WINNT_WIN7=0x0601" />
-			<Add directory="$(#boost.include)" />
-		</Compiler>
 		<Unit filename="../../source/any.cpp" />
 		<Unit filename="../../source/audio/detail/audio_device.cpp" />
 		<Unit filename="../../source/audio/detail/audio_stream.cpp" />
@@ -59,6 +50,7 @@
 		<Unit filename="../../source/datetime.cpp" />
 		<Unit filename="../../source/deploy.cpp" />
 		<Unit filename="../../source/detail/platform_abstraction.cpp" />
+		<Unit filename="../../source/detail/platform_spec_posix.cpp" />
 		<Unit filename="../../source/detail/platform_spec_windows.cpp" />
 		<Unit filename="../../source/filesystem/filesystem.cpp" />
 		<Unit filename="../../source/gui/animation.cpp" />
@@ -74,6 +66,7 @@
 		<Unit filename="../../source/gui/detail/native_window_interface.cpp" />
 		<Unit filename="../../source/gui/detail/window_layout.cpp" />
 		<Unit filename="../../source/gui/detail/window_manager.cpp" />
+		<Unit filename="../../source/gui/dragdrop.cpp" />
 		<Unit filename="../../source/gui/dragger.cpp" />
 		<Unit filename="../../source/gui/drawing.cpp" />
 		<Unit filename="../../source/gui/effects.cpp" />
@@ -95,7 +88,6 @@
 		<Unit filename="../../source/gui/widgets/date_chooser.cpp" />
 		<Unit filename="../../source/gui/widgets/float_listbox.cpp" />
 		<Unit filename="../../source/gui/widgets/form.cpp" />
-		<Unit filename="../../source/gui/widgets/frame.cpp" />
 		<Unit filename="../../source/gui/widgets/group.cpp" />
 		<Unit filename="../../source/gui/widgets/label.cpp" />
 		<Unit filename="../../source/gui/widgets/listbox.cpp" />
@@ -127,6 +119,7 @@
 		<Unit filename="../../source/system/dataexch.cpp" />
 		<Unit filename="../../source/system/platform.cpp" />
 		<Unit filename="../../source/system/shared_wrapper.cpp" />
+		<Unit filename="../../source/system/split_string.cpp" />
 		<Unit filename="../../source/system/timepiece.cpp" />
 		<Unit filename="../../source/threads/pool.cpp" />
 		<Unit filename="../../source/unicode_bidi.cpp" />

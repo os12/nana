@@ -1,7 +1,7 @@
 /*
  *	Platform Specification Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Nana Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -27,7 +27,6 @@
 #include <algorithm>
 #include <nana/paint/graphics.hpp>
 #include <nana/gui/detail/bedrock.hpp>
-#include <nana/gui/detail/basic_window.hpp>
 #include <nana/gui/detail/window_manager.hpp>
 #include <nana/system/platform.hpp>
 #include <nana/paint/pixel_buffer.hpp>
@@ -35,6 +34,7 @@
 #include <sstream>
 
 #include "posix/msg_dispatcher.hpp"
+#include "../gui/detail/basic_window.hpp"
 
 namespace nana
 {
@@ -95,7 +95,7 @@ namespace detail
 			return std::string();
 		}
 	//end class conf
-
+#if 0
 	//class charset_conv
 		charset_conv::charset_conv(const char* tocode, const char* fromcode)
 		{
@@ -140,6 +140,7 @@ namespace detail
 			return rstr;
 		}
 	//end class charset_conv
+#endif
 #endif
 
 	//Caret implementation
@@ -206,18 +207,18 @@ namespace detail
 			}
 		}
 	};
-	
+
 	class timer_runner
 	{
-		typedef void (*timer_proc_t)(std::size_t id);
+		using handler_type = void(*)(const timer_core*);
 
 		struct timer_tag
 		{
-			std::size_t id;
-			unsigned tid;
+			const timer_core* handle;
+			thread_t	thread_id;
 			std::size_t interval;
 			std::size_t timestamp;
-			timer_proc_t proc;
+			handler_type handler;
 		};
 
 		//timer_group
@@ -233,32 +234,32 @@ namespace detail
 		struct timer_group
 		{
 			bool proc_entered{false};	//This flag indicates whether the timers are going to do event.
-			std::set<std::size_t> timers;
-			std::vector<std::size_t> delay_deleted;
+			std::set<const timer_core*> timers;
+			std::vector<const timer_core*> delay_deleted;
 		};
 	public:
 		timer_runner()
 			: is_proc_handling_(false)
 		{}
 
-		void set(std::size_t id, std::size_t interval, timer_proc_t proc)
+		void set(const timer_core* handle, std::size_t interval, handler_type handler)
 		{
-			auto i = holder_.find(id);
+			auto i = holder_.find(handle);
 			if(i != holder_.end())
 			{
 				i->second.interval = interval;
-				i->second.proc = proc;
+				i->second.handler = handler;
 				return;
 			}
-			unsigned tid = nana::system::this_thread_id();
-			threadmap_[tid].timers.insert(id);
+			auto tid = nana::system::this_thread_id();
+			threadmap_[tid].timers.insert(handle);
 
-			timer_tag & tag = holder_[id];
-			tag.id = id;
-			tag.tid = tid;
+			timer_tag & tag = holder_[handle];
+			tag.handle = handle;
+			tag.thread_id = tid;
 			tag.interval = interval;
 			tag.timestamp = 0;
-			tag.proc = proc;
+			tag.handler = handler;
 		}
 
 		bool is_proc_handling() const
@@ -266,36 +267,32 @@ namespace detail
 			return is_proc_handling_;
 		}
 
-		void kill(std::size_t id)
+		bool kill(const timer_core* handle)
 		{
-			auto i = holder_.find(id);
+			auto i = holder_.find(handle);
 			if(i != holder_.end())
 			{
-				auto tid = i->second.tid;
-				
+				auto tid = i->second.thread_id;
+
 				auto ig = threadmap_.find(tid);
 				if(ig != threadmap_.end())	//Generally, the ig should not be the end of threadmap_
 				{
 					auto & group = ig->second;
 					if(!group.proc_entered)
 					{
-						group.timers.erase(id);
+						group.timers.erase(handle);
 						if(group.timers.empty())
 							threadmap_.erase(ig);
 					}
 					else
-						group.delay_deleted.push_back(id);
+						group.delay_deleted.push_back(handle);
 				}
 				holder_.erase(i);
 			}
+			return holder_.empty();
 		}
 
-		bool empty() const
-		{
-			return (holder_.empty());
-		}
-
-		void timer_proc(unsigned tid)
+		void timer_proc(thread_t tid)
 		{
 			is_proc_handling_ = true;
 			auto i = threadmap_.find(tid);
@@ -314,7 +311,7 @@ namespace detail
 							tag.timestamp = ticks;
 							try
 							{
-								tag.proc(tag.id);
+								tag.handler(tag.handle);
 							}catch(...){}	//nothrow
 						}
 					}
@@ -329,8 +326,8 @@ namespace detail
 		}
 	private:
 		bool is_proc_handling_;
-		std::map<unsigned, timer_group> threadmap_;
-		std::map<std::size_t, timer_tag> holder_;
+		std::map<thread_t, timer_group> threadmap_;
+		std::map<const timer_core*, timer_tag> holder_;
 	};
 
 	drawable_impl_type::drawable_impl_type()
@@ -338,49 +335,28 @@ namespace detail
 		string.tab_length = 4;
 		string.tab_pixels = 0;
 		string.whitespace_pixels = 0;
-#if defined(NANA_USE_XFT)
-		conv_.handle = ::iconv_open("UTF-8", "UTF-32");
-		conv_.code = "UTF-32";
-#endif
-	}
-
-	drawable_impl_type::~drawable_impl_type()
-	{
-#if defined(NANA_USE_XFT)
-		::iconv_close(conv_.handle);
-#endif
-	}
-
-	unsigned drawable_impl_type::get_color() const
-	{
-		return color_;
-	}
-
-	unsigned drawable_impl_type::get_text_color() const
-	{
-		return text_color_;
 	}
 
 	void drawable_impl_type::set_color(const ::nana::color& clr)
 	{
-		color_ = (clr.px_color().value & 0xFFFFFF);
+		bgcolor_rgb = (clr.px_color().value & 0xFFFFFF);
 	}
 
 	void drawable_impl_type::set_text_color(const ::nana::color& clr)
 	{
-		text_color_ = (clr.px_color().value & 0xFFFFFF);
+		fgcolor_rgb = (clr.px_color().value & 0xFFFFFF);
 		update_text_color();
 	}
 
 	void drawable_impl_type::update_color()
 	{
-		if (color_ != current_color_)
+		if (bgcolor_rgb != current_color_)
 		{
 			auto & spec = nana::detail::platform_spec::instance();
 			platform_scope_guard lock;
 
-			current_color_ = color_;
-			auto col = color_;
+			current_color_ = bgcolor_rgb;
+			auto col = bgcolor_rgb;
 			switch (spec.screen_depth())
 			{
 			case 16:
@@ -391,18 +367,32 @@ namespace detail
 			}
 			::XSetForeground(spec.open_display(), context, col);
 			::XSetBackground(spec.open_display(), context, col);
+
+#if defined(NANA_USE_XFT)
+			//xft_fgcolor also needs to be assigned.
+			//assumes the xft_fgcolor is not assigned in update_color. There is a situation that causes a bug.
+			//
+			//update_text_color ( if fgcolor_rgb = A, then current_color = A and xft_fgcolor = A)
+			//update_color (if bgcolor_rgb = B, then current_color = B and xft_fgcolor is still A)
+			//update_text_color ( if fgcolor_rgb = B, then current_color = B, xft_fgcolor is still A)
+
+			xft_fgcolor.color.red = ((0xFF0000 & col) >> 16) * 0x101;
+			xft_fgcolor.color.green = ((0xFF00 & col) >> 8) * 0x101;
+			xft_fgcolor.color.blue = (0xFF & col) * 0x101;
+			xft_fgcolor.color.alpha = 0xFFFF;
+#endif
 		}
 	}
 
 	void drawable_impl_type::update_text_color()
 	{
-		if (text_color_ != current_color_)
+		if (fgcolor_rgb != current_color_)
 		{
 			auto & spec = nana::detail::platform_spec::instance();
 			platform_scope_guard lock;
 
-			current_color_ = text_color_;
-			auto col = text_color_;
+			current_color_ = fgcolor_rgb;
+			auto col = fgcolor_rgb;
 			switch (spec.screen_depth())
 			{
 			case 16:
@@ -445,7 +435,7 @@ namespace detail
 	}
 
 	platform_spec::timer_runner_tag::timer_runner_tag()
-		: runner(0), delete_declared(false)
+		: runner(nullptr), delete_declared(false)
 	{}
 
 	platform_spec::platform_spec()
@@ -486,6 +476,7 @@ namespace detail
 		atombase_.wm_protocols = ::XInternAtom(display_, "WM_PROTOCOLS", False);
 		atombase_.wm_change_state = ::XInternAtom(display_, "WM_CHANGE_STATE", False);
 		atombase_.wm_delete_window = ::XInternAtom(display_, "WM_DELETE_WINDOW", False);
+		atombase_.net_frame_extents = ::XInternAtom(display_, "_NET_FRAME_EXTENTS", False);
 		atombase_.net_wm_state = ::XInternAtom(display_, "_NET_WM_STATE", False);
 		atombase_.net_wm_state_skip_taskbar = ::XInternAtom(display_, "_NET_WM_STATE_SKIP_TASKBAR", False);
 		atombase_.net_wm_state_fullscreen = ::XInternAtom(display_, "_NET_WM_STATE_FULLSCREEN", False);
@@ -499,20 +490,23 @@ namespace detail
 		atombase_.net_wm_window_type_dialog = ::XInternAtom(display_, "_NET_WM_WINDOW_TYPE_DIALOG", False);
 		atombase_.motif_wm_hints = ::XInternAtom(display_, "_MOTIF_WM_HINTS", False);
 
-		atombase_.clipboard = ::XInternAtom(display_, "CLIPBOARD", True);
-		atombase_.text = ::XInternAtom(display_, "TEXT", True);
-		atombase_.text_uri_list = ::XInternAtom(display_, "text/uri-list", True);
-		atombase_.utf8_string = ::XInternAtom(display_, "UTF8_STRING", True);
-		atombase_.targets = ::XInternAtom(display_, "TARGETS", True);
+		atombase_.clipboard = ::XInternAtom(display_, "CLIPBOARD", False);
+		atombase_.text = ::XInternAtom(display_, "TEXT", False);
+		atombase_.text_uri_list = ::XInternAtom(display_, "text/uri-list", False);
+		atombase_.utf8_string = ::XInternAtom(display_, "UTF8_STRING", False);
+		atombase_.targets = ::XInternAtom(display_, "TARGETS", False);
 
 		atombase_.xdnd_aware = ::XInternAtom(display_, "XdndAware", False);
 		atombase_.xdnd_enter = ::XInternAtom(display_, "XdndEnter", False);
 		atombase_.xdnd_position = ::XInternAtom(display_, "XdndPosition", False);
 		atombase_.xdnd_status	= ::XInternAtom(display_, "XdndStatus", False);
 		atombase_.xdnd_action_copy = ::XInternAtom(display_, "XdndActionCopy", False);
+		atombase_.xdnd_action_move = ::XInternAtom(display_, "XdndActionMove", False);
+		atombase_.xdnd_action_link = ::XInternAtom(display_, "XdndActionLink", False);
 		atombase_.xdnd_drop = ::XInternAtom(display_, "XdndDrop", False);
 		atombase_.xdnd_selection = ::XInternAtom(display_, "XdndSelection", False);
 		atombase_.xdnd_typelist = ::XInternAtom(display_, "XdndTypeList", False);
+		atombase_.xdnd_leave = ::XInternAtom(display_, "XdndLeave", False);
 		atombase_.xdnd_finished = ::XInternAtom(display_, "XdndFinished", False);
 
 		msg_dispatcher_ = new msg_dispatcher(display_);
@@ -588,16 +582,59 @@ namespace detail
 	}
 
 	//There are three members make_owner(), get_owner() and remove(),
-	//they are maintain a table to discribe the owner of windows because the feature in X11, the
+	//they are maintain a table to discribe the owner of windows because of the feature in X11, the
 	//owner of top level window must be RootWindow.
 	void platform_spec::make_owner(native_window_type owner, native_window_type wd)
 	{
-		platform_scope_guard psg;
+		platform_scope_guard lock;
 		wincontext_[wd].owner = owner;
-		window_context_t & context = wincontext_[owner];
-		if(context.owned == 0)
-			context.owned = new std::vector<native_window_type>;
-		context.owned->push_back(wd);
+		
+		auto& owner_ctx = wincontext_[owner];
+		if(!owner_ctx.owned)
+			owner_ctx.owned = new std::vector<native_window_type>;
+		owner_ctx.owned->push_back(wd);
+	}
+
+	bool platform_spec::umake_owner(native_window_type child)
+	{
+		platform_scope_guard lock;
+
+		auto i = wincontext_.find(child);
+		if(i == wincontext_.end())
+			return false;
+
+		if(i->second.owner)
+		{
+			auto u = wincontext_.find(i->second.owner);
+			if(u != wincontext_.end())
+			{
+				auto * owned = u->second.owned;
+				if(owned)
+				{
+					auto j = std::find(owned->begin(), owned->end(), child);
+					if(j != owned->end())
+						owned->erase(j);
+
+					if(owned->empty())
+					{
+						delete owned;
+						u->second.owned = nullptr;
+						//The owner owns no child. If it is not a child of other owners,
+						//remove it.
+						if(nullptr == u->second.owner)
+							wincontext_.erase(u);
+					}
+				}
+			}
+
+			i->second.owner = nullptr;
+		}
+
+		//Don't remove the ownerships which the child is a owner window.
+		if(nullptr == i->second.owned)
+			wincontext_.erase(i);
+
+		return true;
 	}
 
 	native_window_type platform_spec::get_owner(native_window_type wd) const
@@ -610,37 +647,38 @@ namespace detail
 	void platform_spec::remove(native_window_type wd)
 	{
 		msg_dispatcher_->erase(reinterpret_cast<Window>(wd));
-		platform_scope_guard psg;
-		auto i = wincontext_.find(wd);
-		if(i == wincontext_.end()) return;
 
-		if(i->second.owner)
+		platform_scope_guard lock;
+		if(umake_owner(wd))
 		{
-			auto u = wincontext_.find(i->second.owner);
-			if(u != wincontext_.end())
+			auto & wd_manager = detail::bedrock::instance().wd_manager();
+
+			std::vector<native_window_type> owned_children;
+
+			auto i = wincontext_.find(wd);
+			if(i != wincontext_.end())
 			{
-				auto * vec = u->second.owned;
-				if(vec)
+				if(i->second.owned)
 				{
-					auto j = std::find(vec->begin(), vec->end(), i->first);
-					if(j != vec->end())
-						vec->erase(j);
+					for(auto child : *i->second.owned)
+						owned_children.push_back(child);
 				}
 			}
-		}
 
-		auto * vec = i->second.owned;
-		if(vec)
-		{
+			//Closing a child will erase the wd from the table wincontext_, so the 
+			//iterator i can't be reused after children closed.
 			set_error_handler();
-			auto & wd_manager = detail::bedrock::instance().wd_manager();
-			for(auto u = vec->rbegin(); u != vec->rend(); ++u)
+			for(auto u = owned_children.rbegin(); u != owned_children.rend(); ++u)
 				wd_manager.close(wd_manager.root(*u));
-
 			rev_error_handler();
+
+			i = wincontext_.find(wd);
+			if(i != wincontext_.end())
+			{
+				delete i->second.owned;
+				wincontext_.erase(i);
+			}
 		}
-		delete vec;
-		wincontext_.erase(i);
 		iconbase_.erase(wd);
 	}
 
@@ -723,7 +761,7 @@ namespace detail
 							::XFree(attr);
 						}
 						else
-							addr->input_context = ::XCreateIC(addr->input_method, 
+							addr->input_context = ::XCreateIC(addr->input_method,
 											XNInputStyle, (XIMPreeditNothing | XIMStatusNothing),
 											XNClientWindow, reinterpret_cast<Window>(wd),
 											XNFocusWindow, reinterpret_cast<Window>(wd), nullptr);
@@ -794,7 +832,7 @@ namespace detail
 							XSetWindowAttributes new_attr;
 
 							//Don't remove the KeyPress and KeyRelease mask(0x3), otherwise the window will not receive
-							//Keyboard events after destroying caret 
+							//Keyboard events after destroying caret
 							new_attr.event_mask = (attr.your_event_mask & ~(addr->input_context_event_mask & (~0x3)));
 							::XChangeWindowAttributes(display_, reinterpret_cast<Window>(wd), CWEventMask, &new_attr);
 						}
@@ -834,6 +872,19 @@ namespace detail
 		{
 			i->second->reinstate();
 			i->second->pos = pos;
+		}
+		auto addr = i->second;
+		if(addr && addr->input_context) {
+			XPoint spot;
+			XVaNestedList list;
+			spot.x = pos.x;
+			spot.y = pos.y + addr->size.height;
+			list = ::XVaCreateNestedList(0, XNSpotLocation, &spot,
+					XNForeground, 0,
+					XNBackground, 0,
+					(void *)0);
+			::XSetICValues(addr->input_context, XNPreeditAttributes, list, NULL);
+			::XFree(list);
 		}
 	}
 
@@ -926,34 +977,36 @@ namespace detail
 		return r;
 	}
 
-	void platform_spec::set_timer(std::size_t id, std::size_t interval, void (*timer_proc)(std::size_t))
+	void platform_spec::set_timer(const timer_core* handle, std::size_t interval, void (*timer_proc)(const timer_core*))
 	{
 		std::lock_guard<decltype(timer_.mutex)> lock(timer_.mutex);
-		if(0 == timer_.runner)
+		if(!timer_.runner)
 			timer_.runner = new timer_runner;
-		timer_.runner->set(id, interval, timer_proc);
+
+		timer_.runner->set(handle, interval, timer_proc);
 		timer_.delete_declared = false;
 	}
 
-	void platform_spec::kill_timer(std::size_t id)
+	void platform_spec::kill_timer(const timer_core* handle)
 	{
-		if(timer_.runner == 0) return;
-
 		std::lock_guard<decltype(timer_.mutex)> lock(timer_.mutex);
-		timer_.runner->kill(id);
-		if(timer_.runner->empty())
+		if(timer_.runner)
 		{
-			if(timer_.runner->is_proc_handling() == false)
+			// Test if there is not a timer after killing
+			if(timer_.runner->kill(handle))
 			{
-				delete timer_.runner;
-				timer_.runner = 0;
+				if(timer_.runner->is_proc_handling() == false)
+				{
+					delete timer_.runner;
+					timer_.runner = nullptr;
+				}
+				else
+					timer_.delete_declared = true;
 			}
-			else
-				timer_.delete_declared = true;
 		}
 	}
 
-	void platform_spec::timer_proc(unsigned tid)
+	void platform_spec::timer_proc(thread_t tid)
 	{
 		std::lock_guard<decltype(timer_.mutex)> lock(timer_.mutex);
 		if(timer_.runner)
@@ -962,7 +1015,7 @@ namespace detail
 			if(timer_.delete_declared)
 			{
 				delete timer_.runner;
-				timer_.runner = 0;
+				timer_.runner = nullptr;
 				timer_.delete_declared = false;
 			}
 		}
@@ -981,6 +1034,12 @@ namespace detail
 	void platform_spec::msg_dispatch(native_window_type modal)
 	{
 		msg_dispatcher_->dispatch(reinterpret_cast<Window>(modal));
+	}
+
+	void platform_spec::msg_dispatch(std::function<propagation_chain(const msg_packet_tag&)> msg_filter_fn)
+	{
+		msg_dispatcher_->dispatch(msg_filter_fn);
+
 	}
 
 	void* platform_spec::request_selection(native_window_type requestor, Atom type, size_t& size)
@@ -1046,6 +1105,62 @@ namespace detail
 		return graph;
 	}
 
+
+	bool platform_spec::register_dragdrop(native_window_type wd, x11_dragdrop_interface* ddrop)
+	{
+		platform_scope_guard lock;
+		if(0 != xdnd_.dragdrop.count(wd))
+			return false;
+
+		xdnd_.dragdrop[wd] = ddrop;
+		return true;
+	}
+
+	std::size_t platform_spec::dragdrop_target(native_window_type wd, bool insert, std::size_t count)
+	{
+		std::size_t new_val = 0;
+		platform_scope_guard lock;
+		if(insert)
+		{
+			new_val = (xdnd_.targets[wd] += count);
+			if(1 == new_val)
+			{
+				int dndver = 5;
+				::XChangeProperty(display_, reinterpret_cast<Window>(wd), atombase_.xdnd_aware, XA_ATOM, sizeof(int) * 8,
+					PropModeReplace, reinterpret_cast<unsigned char*>(&dndver), 1);
+			}
+		}
+		else
+		{
+			auto i = xdnd_.targets.find(wd);
+			if(i == xdnd_.targets.end())
+				return 0;
+
+			new_val = (i->second > count ? i->second - count : 0);
+			if(0 == new_val)
+			{
+				xdnd_.targets.erase(wd);
+				::XDeleteProperty(display_, reinterpret_cast<Window>(wd), atombase_.xdnd_aware);
+			}
+			else
+				i->second = new_val;
+		}
+		return new_val;
+	}
+
+	x11_dragdrop_interface* platform_spec::remove_dragdrop(native_window_type wd)
+	{
+		platform_scope_guard lock;
+		auto i = xdnd_.dragdrop.find(wd);
+		if(i == xdnd_.dragdrop.end())
+			return nullptr;
+
+		auto ddrop = i->second;
+		xdnd_.dragdrop.erase(i);
+
+		return ddrop;
+	}
+
 	//_m_msg_filter
 	//@return:	_m_msg_filter returns three states
 	//		0 = msg_dispatcher dispatches the XEvent
@@ -1053,7 +1168,7 @@ namespace detail
 	//		2 = msg_dispatcher should ignore the msg, because the XEvent is processed by _m_msg_filter
 	int platform_spec::_m_msg_filter(XEvent& evt, msg_packet_tag& msg)
 	{
-		auto & bedrock = detail::bedrock::instance();	
+		auto & bedrock = detail::bedrock::instance();
 
 		platform_spec & self = instance();
 		if(KeyPress == evt.type || KeyRelease == evt.type)
@@ -1105,7 +1220,7 @@ namespace detail
 				else if(evt.xselection.property == self.atombase_.xdnd_selection)
 				{
 					bool accepted = false;
-					msg.kind = msg.kind_mouse_drop;
+					msg.kind = msg_packet_tag::pkt_family::mouse_drop;
 					msg.u.mouse_drop.window = 0;
 					if(bytes_left > 0 && type == self.xdnd_.good_type)
 					{
@@ -1115,8 +1230,9 @@ namespace detail
 															0, AnyPropertyType, &type, &format, &len,
 															&dummy_bytes_left, &data))
 						{
-							auto files = new std::vector<std::string>;
+							auto files = new std::vector<std::filesystem::path>;
 							std::stringstream ss(reinterpret_cast<char*>(data));
+
 							while(true)
 							{
 								std::string file;
@@ -1134,8 +1250,9 @@ namespace detail
 										break;
 								}
 
-								files->push_back(file);
+								files->emplace_back(file);
 							}
+
 							if(files->size())
 							{
 								msg.u.mouse_drop.window = evt.xselection.requestor;
@@ -1150,8 +1267,9 @@ namespace detail
 							::XFree(data);
 						}
 					}
-					XEvent respond;
+					::XEvent respond;
 					::memset(respond.xclient.data.l, 0, sizeof(respond.xclient.data.l));
+					respond.xany.type = ClientMessage;
 					respond.xclient.display = self.display_;
 					respond.xclient.window = self.xdnd_.wd_src;
 					respond.xclient.message_type = self.atombase_.xdnd_finished;
@@ -1174,6 +1292,10 @@ namespace detail
 		}
 		else if(SelectionRequest == evt.type)
 		{
+			//Skip if it is requested by XDND, it will be processed by dragdrop's xdnd_protocol
+			if(self.atombase_.xdnd_selection == evt.xselectionrequest.selection)
+				return 0;
+
 			auto disp = evt.xselectionrequest.display;
 			XEvent respond;
 
@@ -1238,24 +1360,56 @@ namespace detail
 						::XGetWindowProperty(self.display_, self.xdnd_.wd_src, self.atombase_.xdnd_typelist,
 											0, bytes_left, False, XA_ATOM,
 											&type, &format, &len, &bytes_left, &data);
+						
 						if(XA_ATOM == type && len > 0)
 							atoms = reinterpret_cast<const Atom*>(data);
 					}
 				}
 
+#define DEBUG_XdndDirectSave
+#ifdef DEBUG_XdndDirectSave
+				Atom XdndDirectSave = 0;
+#endif
 				self.xdnd_.good_type = None;
 				for(unsigned long i = 0; i < len; ++i)
 				{
+					auto name = XGetAtomName(self.display_, atoms[i]); //debug
+					if(name)
+					{
+#ifdef DEBUG_XdndDirectSave
+						if(strstr(name, "XdndDirectSave"))
+							XdndDirectSave = atoms[i];
+#endif
+						::XFree(name);
+					}
+
 					if(atoms[i] == self.atombase_.text_uri_list)
 					{
 						self.xdnd_.good_type = self.atombase_.text_uri_list;
-						break;
+						//break;
 					}
 				}
 
 				if(data)
 					::XFree(data);
 
+#ifdef DEBUG_XdndDirectSave	//debug
+				if(XdndDirectSave)
+				{
+					Atom type;
+					int format;
+					unsigned long bytes_left;
+
+					::XGetWindowProperty(self.display_, self.xdnd_.wd_src, XdndDirectSave, 0, 0, False, XA_ATOM, &type, &format, &len, &bytes_left, &data);
+
+					if(bytes_left > 0)
+					{
+						::XGetWindowProperty(self.display_, self.xdnd_.wd_src, XdndDirectSave,
+											0, bytes_left, False, type,
+											&type, &format, &len, &bytes_left, &data);
+					}
+				}
+#endif
 				return 2;
 			}
 			else if(self.atombase_.xdnd_position == evt.xclient.message_type)
@@ -1264,7 +1418,7 @@ namespace detail
 				int x = (evt.xclient.data.l[2] >> 16);
 				int y = (evt.xclient.data.l[2] & 0xFFFF);
 
-				bool accepted = false;
+				int accepted = 0; //0 means refusing, 1 means accpeting
 				//We have got the type what we want.
 				if(self.xdnd_.good_type != None)
 				{
@@ -1274,9 +1428,10 @@ namespace detail
 					auto wd = bedrock.wd_manager().find_window(reinterpret_cast<native_window_type>(evt.xclient.window), self.xdnd_.pos);
 					if(wd && wd->flags.dropable)
 					{
-						accepted = true;
+						//Cache the time stamp in XdndPosition, and the time stamp must be passed to XConvertSelection for requesting selection
 						self.xdnd_.timestamp = evt.xclient.data.l[3];
 						self.xdnd_.pos = wd->pos_root;
+						accepted = 1;
 					}
 				}
 
@@ -1291,7 +1446,7 @@ namespace detail
 				//Target window
 				respond.xclient.data.l[0] = evt.xclient.window;
 				//Accept set
-				respond.xclient.data.l[1] = (accepted ? 1 : 0);
+				respond.xclient.data.l[1] = accepted;
 				respond.xclient.data.l[2] = 0;
 				respond.xclient.data.l[3] = 0;
 				respond.xclient.data.l[4] = self.atombase_.xdnd_action_copy;
@@ -1299,10 +1454,15 @@ namespace detail
 				::XSendEvent(self.display_, wd_src, True, NoEventMask, &respond);
 				return 2;
 			}
+			else if(self.atombase_.xdnd_status == evt.xclient.message_type)
+			{
+				//Platform Recv XdndStatus
+			}
 			else if(self.atombase_.xdnd_drop == evt.xclient.message_type)
 			{
 				::XConvertSelection(self.display_, self.atombase_.xdnd_selection, self.xdnd_.good_type, self.atombase_.xdnd_selection,
 									evt.xclient.window, self.xdnd_.timestamp);
+
 				//The XdndDrop should send a XdndFinished to source window.
 				//This operation is implemented in SelectionNotify, because
 				//XdndFinished should be sent after retrieving data.

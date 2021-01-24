@@ -1,7 +1,7 @@
 /*
  *	A Spin box widget
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -82,10 +82,39 @@ namespace nana
 
 				bool check_value(const std::string& str) const override
 				{
+#ifdef __cpp_if_constexpr
+					auto i = str.c_str();
+					if ('+' == *i || '-' == *i)
+						++i;
+
+					if constexpr(std::is_same<T, int>::value)
+					{
+						for (; 0 != *i; ++i)
+						{
+							if (*i < '0' || '9' < *i)
+								return false;
+						}
+					}
+					else
+					{
+						bool dot = false;
+						for (; 0 != *i; ++i)
+						{
+							if (('.' == *i) && (!dot))
+							{
+								dot = true;
+								continue;
+							}
+
+							if (*i < '0' || '9' < *i)
+								return false;
+						}
+					}
+#else
 					if (str.empty())
 						return true;
 
-					auto size = str.size();
+					auto const size = str.size();
 					std::size_t pos = 0;
 					if (str[0] == '+' || str[0] == '-')
 						pos = 1;
@@ -115,6 +144,7 @@ namespace nana
 								return false;
 						}
 					}
+#endif
 					return true;
 				}
 
@@ -245,11 +275,11 @@ namespace nana
 						API::update_window(editor_->window_handle());
 
 						auto intv = timer_.interval();
-						if (intv > 50)
+						if (intv.count() > 50)
 							timer_.interval(intv / 2);
 					});
 
-					timer_.interval(600);
+					timer_.interval(std::chrono::milliseconds{ 600 });
 				}
 
 				void attach(::nana::widget& wdg, ::nana::paint::graphics& graph)
@@ -366,7 +396,7 @@ namespace nana
 						API::release_capture(editor_->window_handle());
 
 						timer_.stop();
-						timer_.interval(600);
+						timer_.interval(std::chrono::milliseconds{ 600 });
 					}
 
 					if (buttons::none != spin_stated_)
@@ -437,7 +467,7 @@ namespace nana
 
 					std::wstring text;
 
-					if (API::is_focus_ready(editor_->window_handle()))
+					if (API::is_focus_ready(editor_->window_handle()) && editor_->attr().editable)
 						text = to_wstring(range_->value());
 					else
 						text = to_wstring(modifier_.prefix + range_->value() + modifier_.suffix);
@@ -560,6 +590,12 @@ namespace nana
 				impl_->editor()->reset_caret();
 				API::dev::lazy_refresh();
 			}
+			
+			void drawer::dbl_click(graph_reference, const arg_mouse& arg)
+			{
+				if (impl_->mouse_button(arg, true))
+					API::dev::lazy_refresh();
+			}
 
 			void drawer::mouse_down(graph_reference, const arg_mouse& arg)
 			{
@@ -585,6 +621,13 @@ namespace nana
 				API::dev::lazy_refresh();
 			}
 
+			void drawer::key_ime(graph_reference, const arg_ime& arg)
+			{
+				impl_->editor()->respond_ime(arg);
+				if (impl_->editor()->try_refresh())
+					API::dev::lazy_refresh();
+			}
+
 			void drawer::key_press(graph_reference, const arg_keyboard& arg)
 			{
 				if (impl_->editor()->respond_key(arg))
@@ -599,7 +642,10 @@ namespace nana
 			{
 				impl_->editor()->respond_char(arg);
 				if (impl_->editor()->try_refresh())
+				{
+					impl_->draw_spins();
 					API::dev::lazy_refresh();
+				}
 			}
 
 			void drawer::resized(graph_reference, const arg_resized&)
@@ -687,6 +733,16 @@ namespace nana
 		return range->range();
 	}
 
+	void spinbox::select(bool sel)
+	{
+		internal_scope_guard lock;
+		if (handle())
+		{
+			get_drawer_trigger().impl()->editor()->select(sel);
+			API::refresh_window(*this);
+		}
+	}
+
 	::std::string spinbox::value() const
 	{
 		internal_scope_guard lock;
@@ -725,7 +781,7 @@ namespace nana
 		modifier(to_utf8(prefix), to_utf8(suffix));
 	}
 
-	auto spinbox::_m_caption() const throw() -> native_string_type
+	auto spinbox::_m_caption() const noexcept -> native_string_type
 	{
 		internal_scope_guard lock;
 		auto editor = get_drawer_trigger().impl()->editor();

@@ -1,7 +1,7 @@
 /*
  *	A Button Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2018 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -27,19 +27,14 @@ namespace nana{	namespace drawerbase
 				: trigger_{ t }
 			{}
 
-			optional<size> measure(graph_reference graph, unsigned limit_pixels, bool /*limit_width*/) const override
+			std::optional<size> measure(graph_reference graph, unsigned limit_pixels, bool /*limit_width*/) const override
 			{
 				//Button doesn't provide a support of vfit and hfit
 				if (limit_pixels)
 					return{};
 
 				wchar_t shortkey;
-				std::string::size_type shortkey_pos;
-				
-				auto str = to_wstring(API::transform_shortkey_text(trigger_->wdg_->caption(), shortkey, &shortkey_pos));
-				auto text_sz = graph.text_extent_size(str);
-
-				return size{ text_sz.width, text_sz.height };
+				return graph.text_extent_size(API::transform_shortkey_text(trigger_->wdg_->caption(), shortkey, nullptr));
 			}
 
 			size extension() const override
@@ -155,11 +150,12 @@ namespace nana{	namespace drawerbase
 
 			if (false == cite_.draw(graph, attr_.bgcolor, attr_.fgcolor, ::nana::rectangle{ graph.size() }, e_state))
 			{
-				if (!API::is_transparent_background(*wdg_))
-				{
+				if (API::is_transparent_background(*wdg_))
+					API::dev::copy_transparent_background(*wdg_, graph);
+				else
 					_m_draw_background(graph);
-					_m_draw_border(graph);
-				}
+
+				_m_draw_border(graph);
 			}
 			_m_draw_title(graph, eb);
 		}
@@ -261,43 +257,40 @@ namespace nana{	namespace drawerbase
 						++pos.y;
 					}
 
-					graph.palette(true, attr_.focus_color && attr_.focused ? ::nana::color(colors::blue) : attr_.fgcolor);
+					auto text_color = (attr_.focus_color && attr_.focused ? ::nana::color(colors::blue) : attr_.fgcolor);
+					graph.palette(true, text_color);
 
 					if (attr_.omitted)
-						tr.render(pos, txtptr, txtlen, omitted_pixels, true);
+						tr.render(pos, txtptr, txtlen, omitted_pixels, paint::text_renderer::mode::truncate_with_ellipsis);
 					else
+#ifdef _nana_std_has_string_view
+						graph.bidi_string(pos, { txtptr, txtlen });
+#else
 						graph.bidi_string(pos, txtptr, txtlen);
+#endif
 
-					if(shortkey)
-					{
-						unsigned off_w = (shortkey_pos ? graph.text_extent_size(mbstr.c_str(), shortkey_pos).width : 0);
-
-						wchar_t keystr[2] = {nana::utf::char_at(mbstr.c_str() + shortkey_pos, 0, 0), 0};
-						auto shortkey_size = graph.text_extent_size(keystr, 1);
-
-						unsigned ascent, descent, inleading;
-						graph.text_metrics(ascent, descent, inleading);
-
-						pos.x += off_w;
-						pos.y += static_cast<int>(ascent + 2);
-
-						graph.line(pos, point{ pos.x + static_cast<int>(shortkey_size.width) - 1, pos.y }, colors::black);
-					}
+					API::dev::draw_shortkey_underline(graph, mbstr, shortkey, shortkey_pos, pos, text_color);
 				}
 				else
 				{
 					graph.palette(true, color{ colors::white });
 					if(attr_.omitted)
 					{
-						tr.render(point{ pos.x + 1, pos.y + 1 }, txtptr, txtlen, omitted_pixels, true);
+						tr.render(point{ pos.x + 1, pos.y + 1 }, txtptr, txtlen, omitted_pixels, paint::text_renderer::mode::truncate_with_ellipsis);
 						graph.palette(true, color{ colors::gray });
-						tr.render(pos, txtptr, txtlen, omitted_pixels, true);
+						tr.render(pos, txtptr, txtlen, omitted_pixels, paint::text_renderer::mode::truncate_with_ellipsis);
 					}
 					else
 					{
+#ifdef _nana_std_has_string_view
+						graph.bidi_string(point{ pos.x + 1, pos.y + 1 }, { txtptr, txtlen });
+						graph.palette(true, color{ colors::gray });
+						graph.bidi_string(pos, { txtptr, txtlen });
+#else
 						graph.bidi_string(point{ pos.x + 1, pos.y + 1 }, txtptr, txtlen);
 						graph.palette(true, color{ colors::gray });
 						graph.bidi_string(pos, txtptr, txtlen);
+#endif
 					}
 				}
 			}
@@ -386,7 +379,12 @@ namespace nana{	namespace drawerbase
 
 		void trigger::icon(const nana::paint::image& img)
 		{
-			if(img.empty())	return;
+			if(img.empty())
+			{
+				delete attr_.icon;
+				attr_.icon = nullptr;
+				return;
+			}
 
 			if(nullptr == attr_.icon)
 				attr_.icon = new paint::image;
@@ -397,7 +395,7 @@ namespace nana{	namespace drawerbase
 }//end namespace drawerbase
 
 		//button
-		//@brief: Defaine a button widget and it provides the interfaces to be operational
+		//@brief: Define a button widget and it provides the interfaces to be operational
 			button::button(){}
 
 			button::button(window wd, bool visible)

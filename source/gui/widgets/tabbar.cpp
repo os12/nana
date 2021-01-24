@@ -1,6 +1,6 @@
 /*
  *	A Tabbar Implementation
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -492,9 +492,17 @@ namespace nana
 					return (trace_.what != trace_.null);
 				}
 
-				bool active_by_trace()
+				bool active_by_trace(const arg_mouse& arg)
 				{
-					return ((trace_.what == trace_.item) && (trace_.item_part != trace_.close)? activate(trace_.u.index) : false);
+					if((trace_.what == trace_.item) && (trace_.item_part != trace_.close))
+					{
+						if(false == evt_agent_->click(arg, trace_.u.index))
+							return activate(trace_.u.index);
+
+						return true;
+					}
+					
+					return false;
 				}
 
 				bool release()
@@ -740,7 +748,7 @@ namespace nana
 					}
 					return false;
 				}
-			private: //Fundation
+			private: //Foundation
 				bool _m_nextable() const
 				{
 					return (basis_.scroll_pixels + _m_itembar_right() < basis_.item_pixels * list_.size());
@@ -750,16 +758,28 @@ namespace nana
 				{
 					if((pos == npos) || (pos >= list_.size()))
 					{
+						pos = list_.size();
+						
+						if(evt_agent_)
+							if(!evt_agent_->adding(pos))
+								return false;
+
 						this->list_.emplace_back();
-						pos = list_.size() - 1;
 					}
 					else
+					{
+						if(evt_agent_)
+							if(!evt_agent_->adding(pos))
+								return false;
+
 						list_.emplace(iterator_at(pos));
+					}
 
 					basis_.active = pos;
 					if(evt_agent_)
 					{
 						evt_agent_->added(pos);
+						erase(pos);
 						evt_agent_->activated(pos);
 					}
 					return true;
@@ -1030,7 +1050,7 @@ namespace nana
 
 								std::wstring wtext = to_wstring(item.text);
 								tr.render({ m.r.x + 24, m.r.y + static_cast<int>(m.r.height - ts.height) / 2 },
-											wtext.c_str(), wtext.length(), basis_.item_pixels - 24 - 18, true);
+											wtext.c_str(), wtext.length(), basis_.item_pixels - 24 - 18, paint::text_renderer::mode::truncate_with_ellipsis);
 							}
 						}
 
@@ -1209,7 +1229,8 @@ namespace nana
 
 				void trigger::erase(std::size_t pos)
 				{
-					layouter_->erase(pos);
+					if (layouter_->erase(pos))
+						API::refresh_window(layouter_->widget_handle());
 				}
 
 				void trigger::tab_color(std::size_t i, bool is_bgcolor, const ::nana::color& clr)
@@ -1271,9 +1292,10 @@ namespace nana
 
 				void trigger::mouse_down(graph_reference, const arg_mouse& arg)
 				{
-					if(layouter_->press())
+					//Activates the tab only if left button is clicked.
+					if(arg.is_left_button() && layouter_->press())
 					{
-						if(false == layouter_->active_by_trace())
+						if(false == layouter_->active_by_trace(arg))
 							layouter_->toolbox_answer(arg);
 						layouter_->render();
 						API::dev::lazy_refresh();
@@ -1489,7 +1511,12 @@ namespace nana
 							}
 
 							graph.rectangle(r, true);
+#ifdef _nana_std_has_string_view
+							graph.bidi_string({ m.pos_ends.first + 5, 0 }, m.text);
+
+#else
 							graph.bidi_string({ m.pos_ends.first + 5, 0 }, m.text.data(), m.text.size());
+#endif
 
 							++pos;
 						}
@@ -1533,7 +1560,7 @@ namespace nana
 						delete model_;
 					}
 
-					model* driver::get_model() const throw()
+					model* driver::get_model() const noexcept
 					{
 						return model_;
 					}
@@ -1568,10 +1595,10 @@ namespace nana
 						API::dev::lazy_refresh();
 					}
 
-					void driver::mouse_down(graph_reference graph, const arg_mouse&)
+					void driver::mouse_down(graph_reference graph, const arg_mouse& arg)
 					{
 						auto & indexes = model_->get_indexes();
-						if ((indexes.hovered_pos == model_->npos) || (indexes.active_pos == indexes.hovered_pos))
+						if ((indexes.hovered_pos == model_->npos) || (indexes.active_pos == indexes.hovered_pos) || !arg.is_left_button())
 							return;
 
 						if (indexes.active_pos != indexes.hovered_pos)

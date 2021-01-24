@@ -1,7 +1,7 @@
-/**
+﻿/**
  *	A Textbox Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -16,6 +16,8 @@
 #include <nana/gui/widgets/widget.hpp>
 #include "skeletons/textbase_export_interface.hpp"
 #include "skeletons/text_editor_part.hpp"
+
+#include <nana/optional.hpp>
 
 namespace nana
 {
@@ -81,6 +83,7 @@ namespace nana
 				void mouse_enter(graph_reference, const arg_mouse&)	override;
 				void mouse_leave(graph_reference, const arg_mouse&)	override;
 				void dbl_click(graph_reference, const arg_mouse&)	override;
+				void key_ime(graph_reference, const arg_ime&)	override;
 				void key_press(graph_reference, const arg_keyboard&)override;
 				void key_char(graph_reference, const arg_keyboard&)	override;
 				void mouse_wheel(graph_reference, const arg_wheel&)	override;
@@ -106,6 +109,8 @@ namespace nana
 
 		using text_focus_behavior = widgets::skeletons::text_focus_behavior;
 		using text_positions = std::vector<upoint>;
+
+		using path_type = std::filesystem::path;
 
 		/// The default constructor without creating the widget.
 		textbox();
@@ -134,11 +139,13 @@ namespace nana
 		textbox(window, const rectangle& = rectangle(), bool visible = true);
 
         ///  \brief Loads a text file. When attempt to load a unicode encoded text file, be sure the file have a BOM header.
-		void load(std::string file);
-		void store(std::string file);
-		void store(std::string file, nana::unicode encoding);
+		void load(const path_type& file);
+		void store(const path_type& file);
+		void store(const path_type& file, nana::unicode encoding);
 
 		colored_area_access_interface* colored_area_access();
+
+		point content_origin() const;
 
 		/// Enables/disables the textbox to indent a line. Idents a new line when it is created by pressing enter.
 		/// @param generator generates text for identing a line. If it is empty, textbox indents the line according to last line.
@@ -154,7 +161,7 @@ namespace nana
 		textbox& reset(const std::string& text = std::string(), bool end_caret = true);      ///< discard the old text and set a new text
 
 		/// The file of last store operation.
-		std::string filename() const;
+		path_type filename() const;
 
 		/// Determine whether the text was edited.
 		bool edited() const;
@@ -171,16 +178,30 @@ namespace nana
 		/// Read the text from a specified line with a set offset. It returns true for success.
 		bool getline(std::size_t line_index,std::size_t offset,std::string& text) const;
 
+    // Get all text from textbox.
+    // It returns a empty string if failed or the textbox is empty.
+    std::string text() const { return caption(); }
+
+		/// Read the text from a specified line; returns an empty optional on failure
+		std::optional<std::string> getline(std::size_t pos) const;
+
+		///Read the text from a specified line with a set offset. Returns an empty optional for
+		/// failure.
+		std::optional<std::string> getline(std::size_t line_index, std::size_t offset) const;
+
 		/// Gets the caret position
 		/// Returns true if the caret is in the area of display, false otherwise.
 		bool caret_pos(point& pos, bool text_coordinate) const;
+
+		/// Gets the caret position, in text coordinate
+		upoint caret_pos() const;
 
 		/// Sets the caret position with a text position
 		textbox& caret_pos(const upoint&);
 
         /// Appends an string. If `at_caret` is `true`, the string is inserted at the position of caret, otherwise, it is appended at end of the textbox.
 		textbox& append(const std::string& text, bool at_caret);
-
+        textbox& append(const std::wstring& text, bool at_caret);
 		/// Determines whether the text is line wrapped.
 		bool line_wrapped() const;
 		textbox& line_wrapped(bool);
@@ -207,8 +228,10 @@ namespace nana
 		bool selected() const;
 		bool get_selected_points(nana::upoint &a, nana::upoint &b) const;
 
-        /// Selects/unselects all text.
+        /// Selects/Deselects all text.
 		void select(bool);
+
+		void select_points(nana::upoint arg_a, nana::upoint arg_b);
 
 		/// Returns the bounds of a text selection
 		/**
@@ -271,9 +294,10 @@ namespace nana
 		std::size_t text_line_count() const noexcept;
 	protected:
 		//Overrides widget's virtual functions
-		native_string_type _m_caption() const throw() override;
+		native_string_type _m_caption() const noexcept override;
 		void _m_caption(native_string_type&&) override;
 		void _m_typeface(const paint::font&) override;
+		std::shared_ptr<scroll_operation_interface> _m_scroll_operation() override;
 	};
 }//end namespace nana
 #include <nana/pop_ignore_diagnostic>

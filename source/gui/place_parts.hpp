@@ -1,13 +1,13 @@
-/*
+/**
  *	Parts of Class Place
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
- *	(See accompanying file LICENSE_1_0.txt or copy at
+ *	(See accompanying file LICENSE or copy at
  *	http://www.boost.org/LICENSE_1_0.txt)
  *
- *	@file: nana/gui/place_parts.hpp
+ *	@file nana/gui/place_parts.hpp
  */
 #ifndef NANA_GUI_PLACE_PARTS_HPP
 #define NANA_GUI_PLACE_PARTS_HPP
@@ -126,6 +126,12 @@ namespace nana
 			{
 				close_fn_ = std::move(fn);
 			}
+
+			bool hit_close() const
+			{
+				return x_pointed_;
+			}
+
 		private:
 			virtual void attached(widget_reference wdg, graph_reference graph) override
 			{
@@ -140,7 +146,8 @@ namespace nana
 
 				//draw caption
 				auto text = to_wstring(API::window_caption(window_handle_));
-				text_rd_->render({ 3, 1 }, text.data(), text.size(), graph.size().width - 20, true);
+				if((graph.size().width > 20) && (graph.size().width - 20 > 10))
+					text_rd_->render({ 3, 1 }, text.data(), text.size(), graph.size().width - 20, paint::text_renderer::mode::truncate_with_ellipsis);
 
 				//draw x button
 				auto r = _m_button_area();
@@ -260,7 +267,7 @@ namespace nana
 					notifier_->request_close();
 				});
 
-				this->events().resized.connect([this](const arg_resized& arg)
+				this->events().resized.connect_unignorable([this](const arg_resized& arg)
 				{
 					rectangle r{ 0, 0, arg.width, 20 };
 					caption_.move(r);
@@ -310,7 +317,9 @@ namespace nana
 							{
 								move_pos += moves_.start_container_pos;
 								API::move_window(container_->handle(), move_pos);
-								notifier_->notify_move();
+
+								if(!caption_.get_drawer_trigger().hit_close())
+									notifier_->notify_move();
 							}
 						}
 					}
@@ -360,7 +369,7 @@ namespace nana
 				API::set_parent_window(handle(), container_->handle());
 				this->move({ 1, 1 });
 
-				container_->events().resized.connect([this](const arg_resized& arg)
+				container_->events().resized.connect_unignorable([this](const arg_resized& arg)
 				{
 					this->size({arg.width - 2, arg.height - 2});
 				});
@@ -436,10 +445,13 @@ namespace nana
 						caption_.caption(wdg->caption());
 					}
 
-					panels_.emplace_back();
 					auto wdg_ptr = wdg.get();
+#ifdef _nana_std_has_emplace_return_type
+					panels_.emplace_back().widget_ptr = std::move(wdg);
+#else
+					panels_.emplace_back();
 					panels_.back().widget_ptr.swap(wdg);
-
+#endif
 					for (auto & pn : panels_)
 					{
 						if (pn.widget_ptr)
@@ -557,7 +569,10 @@ namespace nana
 			}value_;
 		};//end class number_t
 
-
+		/// Margin attribute
+		/**
+		 * Definition at https://github.com/cnjinhao/nana/wiki/Div-Text#margin
+		 */
 		class margin
 		{
 		public:
@@ -598,18 +613,22 @@ namespace nana
 				{
 				case 0:	break;
 				case 1:	//top
-					il = ir = it = ib = 0;
+					it = 0;
 					break;
 				case 2://top,bottom and left,right
 					it = ib = 0;
 					il = ir = 1;
 					break;
-				default:
-					il = 3;	//left
 				case 3:	//top, right, bottom
 					it = 0;
 					ir = 1;
 					ib = 2;
+					break;
+				default: //left, top, right, bottom, left
+					it = 0;
+					ir = 1;
+					ib = 2;
+					il = 3;
 				}
 
 				int pos = 0;
@@ -624,7 +643,7 @@ namespace nana
 				case 3: //left
 					pos = il; break;
 				default:
-					return number_t{};
+					return {};
 				}
 
 				return (-1 == pos ? number_t{} : margins_[pos]);
@@ -652,18 +671,22 @@ namespace nana
 					{
 					case 0:	break;
 					case 1:	//top
-						il = ir = it = ib = 0;
+						it = 0;
 						break;
 					case 2://top,bottom and left,right
 						it = ib = 0;
 						il = ir = 1;
 						break;
-					default:
-						il = 3;	//left
 					case 3:	//top, right, bottom
 						it = 0;
 						ir = 1;
 						ib = 2;
+						break;
+					default: //left, top, right, bottom, left
+						it = 0;
+						ir = 1;
+						ib = 2;
+						il = 3;
 					}
 
 					using px_type = decltype(r.height);

@@ -1,7 +1,7 @@
 /*
  *	Platform Specification Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -13,13 +13,14 @@
  *	This file should not be included by any header files.
  */
 
-#if defined(NANA_LINUX) || defined(NANA_MACOS)
+#if defined(NANA_POSIX)
 
 #ifndef NANA_DETAIL_PLATFORM_SPEC_HPP
 #define NANA_DETAIL_PLATFORM_SPEC_HPP
 
 #include <nana/push_ignore_diagnostic>
 
+#include <atomic>
 #include <thread>
 #include <mutex>
 #include <memory>
@@ -35,12 +36,12 @@
 
 #include <vector>
 #include <map>
+#include <functional>
 #include "msg_packet.hpp"
 #include "../platform_abstraction_types.hpp"
 
 #if defined(NANA_USE_XFT)
 	#include <X11/Xft/Xft.h>
-	#include <iconv.h>
 	#include <fstream>
 #endif
 
@@ -59,19 +60,6 @@ namespace detail
 		std::string value(const char* key);
 	private:
 		std::ifstream ifs_;
-	};
-
-	class charset_conv
-	{
-		charset_conv(const charset_conv&) = delete;
-		charset_conv& operator=(const charset_conv*) = delete;
-	public:
-		charset_conv(const char* tocode, const char* fromcode);
-		~charset_conv();
-		std::string charset(const std::string& str) const;
-		std::string charset(const char * buf, std::size_t len) const;
-	private:
-		iconv_t handle_;
 	};
 #endif
 
@@ -93,16 +81,15 @@ namespace detail
 			unsigned whitespace_pixels;
 		}string;
 
+		unsigned fgcolor_rgb{ 0xFFFFFFFF };
+		unsigned bgcolor_rgb{ 0xFFFFFFFF };
+
 #if defined(NANA_USE_XFT)
 		XftDraw * xftdraw{nullptr};
 		XftColor	xft_fgcolor;
-		const std::string charset(const std::wstring& str, const std::string& strcode);
 #endif
 		drawable_impl_type();
-		~drawable_impl_type();
 
-		unsigned get_color() const;
-		unsigned get_text_color() const;
 		void set_color(const ::nana::color&);
 		void set_text_color(const ::nana::color&);
 
@@ -113,16 +100,6 @@ namespace detail
 		drawable_impl_type& operator=(const drawable_impl_type&) = delete;
 
 		unsigned current_color_{ 0xFFFFFF };
-		unsigned color_{ 0xFFFFFFFF };
-		unsigned text_color_{ 0xFFFFFFFF };
-
-#if defined(NANA_USE_XFT)
-		struct conv_tag
-		{
-			iconv_t handle;
-			std::string code;
-		}conv_;
-#endif
 	};
 
 	struct atombase_tag
@@ -132,6 +109,7 @@ namespace detail
 		Atom wm_change_state;
 		Atom wm_delete_window;
 		//ext
+		Atom net_frame_extents;
 		Atom net_wm_state;
 		Atom net_wm_state_skip_taskbar;
 		Atom net_wm_state_fullscreen;
@@ -156,14 +134,24 @@ namespace detail
 		Atom xdnd_position;
 		Atom xdnd_status;
 		Atom xdnd_action_copy;
+		Atom xdnd_action_move;
+		Atom xdnd_action_link;
 		Atom xdnd_drop;
 		Atom xdnd_selection;
 		Atom xdnd_typelist;
+		Atom xdnd_leave;
 		Atom xdnd_finished;
 	};
 
 	//A forward declaration of caret data
 	struct caret_rep;
+
+	/// class timer_core
+	/**
+	 * Platform-spec only provides the declaration for intrducing a handle type, the definition
+	 * of timer_core is given by gui/timer.cpp
+	 */
+	class timer_core;
 
 	class timer_runner;
 
@@ -172,6 +160,15 @@ namespace detail
 	public:
 		platform_scope_guard();
 		~platform_scope_guard();
+	};
+
+	class x11_dragdrop_interface
+	{
+	public:
+		virtual ~x11_dragdrop_interface() = default;
+
+		virtual void add_ref() = 0;
+		virtual std::size_t release() = 0;
 	};
 
 	class platform_spec
@@ -186,7 +183,7 @@ namespace detail
 	public:
 		int error_code;
 	public:
-		typedef void (*timer_proc_type)(unsigned tid);
+		typedef void (*timer_proc_type)(thread_t tid);
 		typedef void (*event_proc_type)(Display*, msg_packet_tag&);
 		typedef ::nana::event_code		event_code;
 		typedef ::nana::native_window_type	native_window_type;
@@ -213,6 +210,9 @@ namespace detail
 		const atombase_tag & atombase() const;
 
 		void make_owner(native_window_type owner, native_window_type wd);
+
+		// Cancel the ownership
+		bool umake_owner(native_window_type child);
 		native_window_type get_owner(native_window_type) const;
 		void remove(native_window_type);
 
@@ -233,14 +233,15 @@ namespace detail
 		//when native_interface::show a window that is registered as a grab
 		//window, the native_interface grabs the window.
 		Window grab(Window);
-		void set_timer(std::size_t id, std::size_t interval, void (*timer_proc)(std::size_t id));
-		void kill_timer(std::size_t id);
-		void timer_proc(unsigned tid);
+		void set_timer(const timer_core*, std::size_t interval, void (*timer_proc)(const timer_core* tm));
+		void kill_timer(const timer_core*);
+		void timer_proc(thread_t tid);
 
 		//Message dispatcher
 		void msg_insert(native_window_type);
 		void msg_set(timer_proc_type, event_proc_type);
 		void msg_dispatch(native_window_type modal);
+		void msg_dispatch(std::function<propagation_chain(const msg_packet_tag&)>);
 
 		//X Selections
 		void* request_selection(native_window_type requester, Atom type, size_t & bufsize);
@@ -250,6 +251,10 @@ namespace detail
 		//@biref: The image object should be kept for a long time till the window is closed,
 		//			the image object is release in remove() method.
 		const nana::paint::graphics& keep_window_icon(native_window_type, const nana::paint::image&);
+
+		bool register_dragdrop(native_window_type, x11_dragdrop_interface*);
+		std::size_t dragdrop_target(native_window_type, bool insert, std::size_t count);
+		x11_dragdrop_interface* remove_dragdrop(native_window_type);
 	private:
 		static int _m_msg_filter(XEvent&, msg_packet_tag&);
 		void _m_caret_routine();
@@ -264,7 +269,7 @@ namespace detail
 		std::recursive_mutex xlib_locker_;
 		struct caret_holder_tag
 		{
-			volatile bool exit_thread;
+			std::atomic<bool> exit_thread;
 			std::unique_ptr<std::thread> thr;
 			std::map<native_window_type, caret_rep*> carets;
 		}caret_holder_;
@@ -306,6 +311,9 @@ namespace detail
 			int timestamp;
 			Window wd_src;
 			nana::point pos;
+
+			std::map<native_window_type, x11_dragdrop_interface*> dragdrop;
+			std::map<native_window_type, std::size_t> targets;
 		}xdnd_;
 
 		msg_dispatcher * msg_dispatcher_;
@@ -319,6 +327,5 @@ namespace detail
 // .h ward
 #endif
 
-//#if defined(NANA_LINUX) || defined(NANA_MACOS)
 #endif
 

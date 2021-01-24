@@ -1,7 +1,7 @@
 /*
 *	An Implementation of i18n
 *	Nana C++ Library(http://www.nanapro.org)
-*	Copyright(C) 2003-2016 Jinhao(cnjinhao@hotmail.com)
+*	Copyright(C) 2003-2018 Jinhao(cnjinhao@hotmail.com)
 *
 *	Distributed under the Boost Software License, Version 1.0.
 *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -185,14 +185,18 @@ namespace nana
 
 				table["NANA_FILEBOX_SAVE_AS"] = "Save As";
 				table["NANA_FILEBOX_OPEN"] = "Open";
-				table["NANA_FILEBOX_DIRECTORY"] = "Directory";
+				table["NANA_FILEBOX_OPEN_DIRECTORY"] = "Select A Directory";
 				table["NANA_FILEBOX_FILE"] = "File";
 				table["NANA_FILEBOX_FILE_COLON"] = "File:";
+				table["NANA_FILEBOX_DIRECTORY"] = "Directory";
+				table["NANA_FILEBOX_DIRECTORY_COLON"] = "Directory:";
 				table["NANA_FILEBOX_ERROR_INVALID_FOLDER_NAME"] = "Please input a valid name for the new folder.";
 				table["NANA_FILEBOX_ERROR_RENAME_FOLDER_BECAUSE_OF_EXISTING"] = "The folder is existing, please rename it.";
 				table["NANA_FILEBOX_ERROR_RENAME_FOLDER_BECAUSE_OF_FAILED_CREATION"] = "Failed to create the folder, please rename it.";
-				table["NANA_FILEBOX_ERROR_INVALID_FILENAME"] = "The filename is invalid.";
+				table["NANA_FILEBOX_ERROR_INVALID_FILENAME"] = "\"%arg0\"\nThe filename is invalid.";
 				table["NANA_FILEBOX_ERROR_NOT_EXISTING_AND_RETRY"] = "The file \"%arg0\"\n is not existing. Please check and retry.";
+				table["NANA_FILEBOX_ERROR_DIRECTORY_NOT_EXISTING_AND_RETRY"] = "The directory \"%arg0\"\n is not existing. Please check and retry.";
+				table["NANA_FILEBOX_ERROR_DIRECTORY_INVALID"] = "The directory \"%arg0\"\n is invalid. Please check and retry.";
 				table["NANA_FILEBOX_ERROR_QUERY_REWRITE_BECAUSE_OF_EXISTING"] = "The input file is existing, do you want to overwrite it?";
 			}
 		};
@@ -414,45 +418,47 @@ namespace nana
 		}
 	}
 
-	void internationalization::_m_fetch_args(std::vector<std::string>&) const
+#ifndef __cpp_fold_expressions
+	void internationalization::_m_fetch_args(std::vector<std::string>&)
 	{}
+#endif
 	
-	void internationalization::_m_fetch_args(std::vector<std::string>& v, const char* arg) const
+	void internationalization::_m_fetch_args(std::vector<std::string>& v, const char* arg)
 	{
 		v.emplace_back(arg);
 	}
 
-	void internationalization::_m_fetch_args(std::vector<std::string>& v, const std::string& arg) const
+	void internationalization::_m_fetch_args(std::vector<std::string>& v, const std::string& arg)
 	{
 		v.emplace_back(arg);
 	}
 
-	void internationalization::_m_fetch_args(std::vector<std::string>& v, std::string& arg) const
+	void internationalization::_m_fetch_args(std::vector<std::string>& v, std::string& arg)
 	{
 		v.emplace_back(arg);
 	}
 
-	void internationalization::_m_fetch_args(std::vector<std::string>& v, std::string&& arg) const
+	void internationalization::_m_fetch_args(std::vector<std::string>& v, std::string&& arg)
 	{
 		v.emplace_back(std::move(arg));
 	}
 
-	void internationalization::_m_fetch_args(std::vector<std::string>& v, const wchar_t* arg) const
+	void internationalization::_m_fetch_args(std::vector<std::string>& v, const wchar_t* arg)
 	{
 		v.emplace_back(to_utf8(arg));
 	}
 
-	void internationalization::_m_fetch_args(std::vector<std::string>& v, const std::wstring& arg) const
+	void internationalization::_m_fetch_args(std::vector<std::string>& v, const std::wstring& arg)
 	{
 		v.emplace_back(to_utf8(arg));
 	}
 
-	void internationalization::_m_fetch_args(std::vector<std::string>& v, std::wstring& arg) const
+	void internationalization::_m_fetch_args(std::vector<std::string>& v, std::wstring& arg)
 	{
 		v.emplace_back(to_utf8(arg));
 	}
 
-	void internationalization::_m_fetch_args(std::vector<std::string>& v, std::wstring&& arg) const
+	void internationalization::_m_fetch_args(std::vector<std::string>& v, std::wstring&& arg)
 	{
 		v.emplace_back(to_utf8(arg));
 	}
@@ -514,7 +520,7 @@ namespace nana
 			args_.emplace_back(arg->clone());
 	}
 
-	//Workaround for VC2013, becuase it can't specified a default explicit move-constructor
+	//Workaround for VC2013, because it can't specify a default explicit move-constructor
 	i18n_eval::i18n_eval(i18n_eval&& other)
 		: msgid_(std::move(other.msgid_)), args_(std::move(other.args_))
 	{

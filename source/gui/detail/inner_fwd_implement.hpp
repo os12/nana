@@ -1,7 +1,7 @@
 /*
  *	Implementations of Inner Forward Declaration
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2016 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2018 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -15,11 +15,15 @@
 #define NANA_GUI_INNER_FWD_IMPLEMENT_HPP
 
 #include <nana/push_ignore_diagnostic>
-#include "inner_fwd.hpp"
 #include "basic_window.hpp"
-#include "../../paint/graphics.hpp"
+#include <nana/gui/detail/inner_fwd.hpp>
+#include <nana/paint/graphics.hpp>
 
 #include <map>
+
+#ifdef NANA_X11
+#	include <atomic>
+#endif
 
 namespace nana{
 	namespace detail
@@ -46,7 +50,7 @@ namespace nana{
 
 			void umake(window wd);
 
-			std::vector<unsigned long> keys(window wd) const;
+			const std::vector<unsigned long>* keys(window wd) const;
 
 			window find(unsigned long key) const;
 		private:
@@ -54,10 +58,13 @@ namespace nana{
 			implementation * impl_;
 		};
 
+		struct window_platform_assoc;
 
 		struct root_misc
 		{
 			basic_window * window;
+			window_platform_assoc * wpassoc{ nullptr };
+
 			nana::paint::graphics	root_graph;
 			shortkey_container		shortkeys;
 
@@ -71,6 +78,19 @@ namespace nana{
 
 			root_misc(root_misc&&);
 			root_misc(basic_window * wd, unsigned width, unsigned height);
+			~root_misc();
+
+#ifdef NANA_X11
+			struct x11msg_confirm
+			{
+				std::atomic<std::size_t> config{ 0 };
+				std::atomic<std::size_t> map{ 0 };
+				std::atomic<std::size_t> unmap{ 0 };
+			}x11msg;
+#endif
+		private:
+			root_misc(const root_misc&) = delete;
+			root_misc& operator=(const root_misc&) = delete;
 		};//end struct root_misc
 
 

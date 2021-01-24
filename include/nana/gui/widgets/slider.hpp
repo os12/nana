@@ -134,7 +134,7 @@ namespace nana
 	}//end namespace drawerbase
 
 
-    /// A slider widget wich the user can drag for tracking
+    /// A slider widget which the user can drag for tracking
 	class slider
 		: public widget_object<category::widget_tag, drawerbase::slider::trigger, drawerbase::slider::slider_events, drawerbase::slider::scheme_impl>
 	{
@@ -151,7 +151,13 @@ namespace nana
 		bool vertical() const;
 		void maximum(unsigned);
 		unsigned maximum() const;
-		void value(unsigned);
+
+		/** Set slider value
+            @param[in] v new value for slider.
+            v will be clipped to the range 0 to maximum
+        */
+		void value(int );
+
 		unsigned value() const;
 		unsigned move_step(bool forward);                         ///< Increase or decrease the value of slider.
 		unsigned adorn() const;

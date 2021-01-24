@@ -61,10 +61,12 @@ namespace nana
 
 				void focus(graph_reference, const arg_focus&)	override;
 				void mouse_wheel(graph_reference, const arg_wheel&) override;
+				void dbl_click(graph_reference, const arg_mouse&) override;
 				void mouse_down(graph_reference, const arg_mouse&)	override;
 				void mouse_move(graph_reference, const arg_mouse&)	override;
 				void mouse_up(graph_reference, const arg_mouse& arg)	override;
 				void mouse_leave(graph_reference, const arg_mouse&)	override;
+				void key_ime(graph_reference, const arg_ime& arg) override;
 				void key_press(graph_reference, const arg_keyboard&) override;
 				void key_char(graph_reference, const arg_keyboard&) override;
 				void resized(graph_reference, const arg_resized&) override;
@@ -76,7 +78,10 @@ namespace nana
 
 	/// Spinbox Widget
 	class spinbox
-		: public widget_object <category::widget_tag, drawerbase::spinbox::drawer, drawerbase::spinbox::spinbox_events, ::nana::widgets::skeletons::text_editor_scheme>
+		: public widget_object <category::widget_tag,
+		                        drawerbase::spinbox::drawer,
+		                        drawerbase::spinbox::spinbox_events,
+		                        ::nana::widgets::skeletons::text_editor_scheme>
 	{
 	public:
 		/// Constructs a spinbox.
@@ -85,7 +90,7 @@ namespace nana
 		spinbox(window, const nana::rectangle& = {}, bool visible = true);
 
 		/// Sets the widget whether it accepts user keyboard input.
-		/// @param accept Set to indicate whether it accepts uesr keyboard input.
+		/// @param accept Set to indicate whether it accepts user keyboard input.   
 		void editable(bool accept);
 
 		/// Determines whether the widget accepts user keyboard input.
@@ -102,7 +107,10 @@ namespace nana
 		std::pair<int, int> range_int() const;
 		std::pair<double, double> range_double() const;
 
-		/// Gets the spined value
+		/// Selects/Deselects the text
+		void select(bool);
+
+		/// Gets the spun value
 		::std::string value() const;
 		void value(const ::std::string&);
 		int to_int() const;
@@ -112,7 +120,7 @@ namespace nana
 		void modifier(std::string prefix_utf8, std::string suffix_utf8);
 		void modifier(const std::wstring & prefix, const std::wstring& suffix);
 	private:
-		native_string_type _m_caption() const throw();
+		native_string_type _m_caption() const noexcept;
 		void _m_caption(native_string_type&&);
 	}; //end class spinbox
 }//end namespace nana

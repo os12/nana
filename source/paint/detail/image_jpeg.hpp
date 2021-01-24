@@ -3,7 +3,7 @@
 
 #include "image_pixbuf.hpp"
 
-//Separate the libpng from the package that system provides.
+//Separate the libjpeg from the package that system provides.
 #if defined(NANA_LIBJPEG)
 	#include <nana_extrlib/jpeglib.h>
 #else
@@ -47,7 +47,7 @@ namespace nana
 				}
 			}
 		public:
-			bool open(const std::experimental::filesystem::path& jpeg_file) override
+			bool open(const std::filesystem::path& jpeg_file) override
 			{
 				auto fp = ::fopen(to_osmbstr(to_utf8(jpeg_file.native())).c_str(), "rb");
 				if(nullptr == fp) return false;
@@ -91,7 +91,7 @@ namespace nana
 				{
 					::jpeg_create_decompress(&jdstru);
 
-					::jpeg_mem_src(&jdstru, const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)), bytes);
+					::jpeg_mem_src(&jdstru, const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)), static_cast<unsigned long>(bytes));
 					_m_read_jpg(jdstru);
 
 					jpeg_finish_decompress(&jdstru);

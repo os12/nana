@@ -1,7 +1,7 @@
 /**
  *	A Categorize Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2020 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0. 
  *	(See accompanying file LICENSE_1_0.txt or copy at 
@@ -115,7 +115,7 @@ namespace nana
 				bool clear();
 
 				//splitstr
-				//@brief: Sets the splitstr. If the parameter will be ingored if it is an empty string.
+				//@brief: Sets the splitstr. If the parameter will be ignored if it is an empty string.
 				void splitstr(const ::std::string&);
 				const ::std::string& splitstr() const;
 				
@@ -248,7 +248,7 @@ namespace nana
 		/// Retrieves a reference of the current category's value type object. If current category is empty, it throws a exception of std::runtime_error.
 		value_type& value() const
 		{
-			return this->get_drawer_trigger().value();
+			return nana::any_cast<value_type&>(this->get_drawer_trigger().value());
 		}
 	private:
 		//Overrides widget's virtual functions

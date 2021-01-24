@@ -1,6 +1,6 @@
 /*
  *	Nana GUI Library Definition
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0. 
  *	(See accompanying file LICENSE_1_0.txt or copy at 
@@ -11,11 +11,17 @@
  *		the file contains the files required for running of Nana.GUI 
  */
 
-#include <nana/gui/wvl.hpp>
+#include <nana/gui/compact.hpp>
+#include <nana/gui/widgets/widget.hpp>
 #include <nana/gui/detail/bedrock.hpp>
 #include <nana/std_thread.hpp>
 #include <iostream> 
-#include <chrono>
+
+#ifdef STD_THREAD_NOT_SUPPORTED
+#	include <boost/chrono.hpp>
+#else
+#	include <chrono>
+#endif
 
 //#define NANA_AUTOMATIC_GUI_TESTING
 namespace nana
@@ -24,7 +30,7 @@ namespace nana
 	{
 		void form_loader_private::insert_form(::nana::widget* p)
 		{
-			bedrock::instance().manage_form_loader(reinterpret_cast<basic_window*>(p->handle()), true);
+			bedrock::instance().manage_form_loader(p->handle(), true);
 		}
 	}
 
@@ -60,7 +66,7 @@ namespace nana
 	void exec(
 		unsigned wait,         // = 1,      ///< for the GUI to be constructed, in seconds  
 		unsigned wait_end,     // = 1,      ///< for the GUI to be destructed, in seconds
-		std::function<void()>f // = {}      ///< emit events to mimics user actions and may asert results
+		std::function<void()>f // = {}      ///< emit events to mimics user actions and may assert results
 	)
 	{
 			

@@ -1,7 +1,7 @@
 /*
 *	A Menu implementation
 *	Nana C++ Library(http://www.nanapro.org)
-*	Copyright(C) 2009-2017 Jinhao(cnjinhao@hotmail.com)
+*	Copyright(C) 2009-2019 Jinhao(cnjinhao@hotmail.com)
 *
 *	Distributed under the Boost Software License, Version 1.0.
 *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -13,12 +13,13 @@
 *		dankan1890(pr#158)
 */
 
+#include <nana/gui/compact.hpp>
+#include <nana/gui/screen.hpp>
 #include <nana/gui/widgets/menu.hpp>
 #include <nana/gui/timer.hpp>
 
 #include <nana/system/platform.hpp>
 #include <nana/gui/element.hpp>
-#include <nana/gui/wvl.hpp>
 #include <nana/paint/text_renderer.hpp>
 #include <cctype>	//introduces tolower
 #include <vector>
@@ -84,7 +85,7 @@ namespace nana
 					crook_.check(facade<element::crook>::state::checked);
 				}
 			private:
-				//Impelement renderer_interface
+				//Implements renderer_interface
 				void background(graph_reference graph, window)
 				{
 					nana::size sz = graph.size();
@@ -133,7 +134,7 @@ namespace nana
 						return;
 					}
 					
-					//Stretchs menu icon only when it doesn't fit, center it otherwise.
+					//Stretches menu icon only when it doesn't fit, center it otherwise.
 					//Contributed by kmribti(pr#102)
 					img.paste(graph, {
 						pos.x + static_cast<int>(image_px - img.size().width) / 2,
@@ -147,7 +148,7 @@ namespace nana
 					nana::paint::text_renderer tr(graph);
 
 					auto wstr = to_wstring(text);
-					tr.render(pos, wstr.c_str(), wstr.length(), text_pixels, true);
+					tr.render(pos, wstr.c_str(), wstr.length(), text_pixels, paint::text_renderer::mode::truncate_with_ellipsis);
 				}
 
 				void sub_arrow(graph_reference graph, const nana::point& pos, unsigned pixels, const attr&)
@@ -441,23 +442,9 @@ namespace nana
 
 						renderer->item_text(graph, nana::point(item_r.x + 40, item_r.y + text_top_off), text, strpixels, attr);
 
-						if (hotkey)
-						{
-							item_ptr->hotkey = hotkey;
-							if (item_ptr->flags.enabled)
-							{
-								auto off_px = (hotkey_pos ? graph.text_extent_size(text.c_str(), hotkey_pos).width : 0);
-								auto hotkey_px = graph.text_extent_size(text.c_str() + hotkey_pos, 1).width;
-
-								unsigned ascent, descent, inleading;
-								graph.text_metrics(ascent, descent, inleading);
-
-								int x = item_r.x + 40 + off_px;
-								int y = item_r.y + text_top_off + ascent + 1;
-
-								graph_->line({ x, y }, { x + static_cast<int>(hotkey_px)-1, y }, colors::black);
-							}
-						}
+						item_ptr->hotkey = hotkey;
+						if (hotkey && item_ptr->flags.enabled)
+								API::dev::draw_shortkey_underline(*graph_, text, hotkey, hotkey_pos, {item_r.x + 40, item_r.y + text_top_off}, colors::black);
 
 						if (item_ptr->linked.menu_ptr)
 							renderer->sub_arrow(graph, nana::point(graph_->width() - 20, item_r.y), item_h_px, attr);
@@ -624,10 +611,14 @@ namespace nana
 							}
 							else if (item_ptr->flags.enabled)
 							{
+								//A pointer refers to a menu object which owns the menu window.
+								//After fn_close_tree_(), *this is an invalid object.
+								auto owner = menu_->owner;
+
 								fn_close_tree_();
 								if (item_ptr->event_handler)
 								{
-									item_proxy ip{ index, menu_->owner };
+									item_proxy ip{ index, owner };
 									item_ptr->event_handler.operator()(ip);
 								}
 								return 1;
@@ -750,7 +741,7 @@ namespace nana
 
 				struct widget_detail
 				{
-					nana::point	monitor_pos;	//It is used for determinating the monitor.
+					nana::point	monitor_pos;	//It is used for determining the monitor.
 					nana::upoint border;
 				}detail_;
 			};//end class menu_drawer
@@ -829,7 +820,7 @@ namespace nana
 					events.mouse_down.connect_unignorable(fn);
 					events.mouse_up.connect_unignorable(fn);
 
-					timer_.interval(100);
+					timer_.interval(std::chrono::milliseconds{ 100 });
 					timer_.elapse([this]{
 						this->_m_open_sub(500);	//Try to open submenu
 					});
@@ -931,13 +922,31 @@ namespace nana
 					}
 					else if (checks::option == item.style)
 					{
-						get_drawer_trigger().mbuilder().checked(active, true);
+						if(active > 0)
+						{
+							do {
+								if(menu->items[--active]->flags.splitter)
+								{
+									++active;
+									break;
+								}
+							} while(active > 0);
+						}
+						while(active < menu->items.size())
+						{
+							menu_item_type &el = *(menu->items[active++]);
+							if(el.flags.splitter)
+								break;
+							if(checks::option == el.style)
+								el.flags.checked = false;
+						}
+						item.flags.checked = true;
 					}
 
 					this->_m_close_all();	//means deleting this;
 					//The deleting operation has moved here, because item.event_handler.operator()(ip)
 					//may create a window, which make a killing focus for menu window, if so the close_all
-					//operation preformences after item.event_handler.operator()(ip), that would be deleting this object twice!
+					//operation performs after item.event_handler.operator()(ip), that would be deleting this object twice!
 
 					if (item.event_handler)
 					{
@@ -1019,13 +1028,18 @@ namespace nana
 							close();
 						break;
 					default:
-						if (2 != send_shortkey(arg.key))
+						switch (send_shortkey(arg.key))
 						{
-							if (API::empty_window(*this) == false)
+						case 0:
+							if (this->empty() == false)
 								close();
-						}
-						else
+							break;
+						case 1:	//The menu has been closed
+							break;
+						case 2:
 							this->submenu(true);
+							break;
+						}
 					}
 				}
 
@@ -1358,6 +1372,11 @@ namespace nana
 		void menu::renderer(const pat::cloneable<renderer_interface>& rd)
 		{
 			impl_->mbuilder.renderer(rd);
+		}
+
+		window menu::handle() const
+		{
+			return (impl_->window_ptr ? impl_->window_ptr->handle() : nullptr);
 		}
 
 		void menu::_m_popup(window wd, const point& pos, bool called_by_menubar)

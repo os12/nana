@@ -1,13 +1,13 @@
-/*
+/**
  *	Platform Specification Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
- *	Distributed under the Boost Software License, Version 1.0. 
- *	(See accompanying file LICENSE_1_0.txt or copy at 
+ *	Distributed under the Boost Software License, Version 1.0.
+ *	(See accompanying file LICENSE_1_0.txt or copy at
  *	http://www.boost.org/LICENSE_1_0.txt)
  *
- *	@file: nana/detail/platform_spec.hpp
+ *	@file nana/detail/platform_spec.hpp
  *
  *	This file provides basis class and data structrue that required by nana
  *	This file should not be included by any header files.
@@ -47,16 +47,6 @@ namespace detail
 			bool visible;
 		};
 
-		struct move_window
-		{
-			enum { Pos = 1, Size = 2};
-			int x;
-			int y;
-			unsigned width;
-			unsigned height;
-			unsigned ignore; //determinate that pos or size would be ignored.
-		};
-
 		struct map_thread
 		{
 			rectangle update_area;
@@ -77,7 +67,6 @@ namespace detail
 			async_set_focus,
 			remote_flush_surface,
 			remote_thread_destroy_window,
-			remote_thread_move_window,
 			operate_caret,	//wParam: 1=Destroy, 2=SetPos
 			remote_thread_set_window_pos,
 			remote_thread_set_window_text,
@@ -100,37 +89,6 @@ namespace detail
 
 		font_type font;
 
-		struct pen_spec
-		{
-			HPEN	handle;
-			unsigned color;
-			int style;
-			int width;
-
-			void set(HDC context, int style, int width,unsigned color);
-		}pen;
-
-		struct brush_spec
-		{
-			enum t{Solid, HatchBDiagonal};
-
-			HBRUSH handle;
-			t style;
-			unsigned color;
-
-			void set(HDC context, t style, unsigned color);
-		}brush;
-
-		struct round_region_spec
-		{
-			HRGN handle;
-			nana::rectangle r;
-			unsigned radius_x;
-			unsigned radius_y;
-
-			void set(const nana::rectangle& r, unsigned radius_x, unsigned radius_y);
-		}round_region;
-
 		struct string_spec
 		{
 			unsigned tab_length;
@@ -138,22 +96,19 @@ namespace detail
 			unsigned whitespace_pixels;
 		}string;
 
+		unsigned fgcolor_rgb{ 0xFFFFFFFF };
+		unsigned bgcolor_rgb{ 0xFFFFFFFF };
+		unsigned fgcolor_native{ 0xFFFFFFFF };	//Windows RGB format: 0xBBGGRR
+		unsigned bgcolor_native{ 0xFFFFFFFF };	//Windows RGB format
+
 		drawable_impl_type(const drawable_impl_type&) = delete;
 		drawable_impl_type& operator=(const drawable_impl_type&) = delete;
 
 		drawable_impl_type();
 		~drawable_impl_type();
 
-		unsigned get_color() const;
-		unsigned get_text_color() const;
 		void set_color(const ::nana::color&);
 		void set_text_color(const ::nana::color&);
-
-		void update_pen();
-		void update_brush();
-	private:
-		unsigned color_{ 0xffffffff };
-		unsigned text_color_{0xffffffff};
 	};
 
 	class platform_spec
@@ -173,6 +128,8 @@ namespace detail
 		public:
 			co_initializer();
 			~co_initializer();
+
+			void task_mem_free(void* p);
 		private:
 			HMODULE ole32_;
 		};

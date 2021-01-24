@@ -1,7 +1,7 @@
 /*
  *	Nana GUI Programming Interface Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -45,6 +45,15 @@ namespace nana
 
 namespace API
 {
+#ifdef NANA_X11
+	//Some platform specific functions for X11
+	namespace x11
+	{
+		/// Returns the connection to the X server
+		const void* get_display();
+	}
+#endif
+
 	namespace detail
 	{
 		::nana::widget_geometrics* make_scheme(::nana::detail::scheme_factory_interface&&);
@@ -80,15 +89,13 @@ namespace API
 		void set_measurer(window, ::nana::dev::widget_content_measurer_interface*);
 
 		void attach_drawer(widget&, drawer_trigger&);
-		::nana::detail::native_string_type window_caption(window) throw();
+		::nana::detail::native_string_type window_caption(window) noexcept;
 		void window_caption(window, ::nana::detail::native_string_type);
 
 		window create_window(window, bool nested, const rectangle&, const appearance&, widget* attached);
 		window create_widget(window, const rectangle&, widget* attached);
 		window create_lite_widget(window, const rectangle&, widget* attached);
-#ifndef WIDGET_FRAME_DEPRECATED
-		window create_frame(window, const rectangle&, widget* attached);
-#endif
+
 		paint::graphics* window_graphics(window);
 
 		void delay_restore(bool);
@@ -101,12 +108,18 @@ namespace API
 		bool copy_transparent_background(window, paint::graphics&);
 		bool copy_transparent_background(window, const rectangle& src_r, paint::graphics&, const point& dst_pt);
 
-		/// Refreshs a widget surface
+		/// Refreshes a widget surface
 		/*
 		 * This function will copy the drawer surface into system window after the event process finished.
 		 */
 		void lazy_refresh();
+
+		void draw_shortkey_underline(paint::graphics&, const std::string& text, wchar_t shortkey, std::size_t shortkey_position, const point& text_pos, const color&);
+
+		void window_draggable(window, bool enabled);
+		bool window_draggable(window);
 	}//end namespace dev
+
 
 	/// Returns the widget pointer of the specified window.
 	/*
@@ -118,7 +131,12 @@ namespace API
 	namespace detail
 	{
 		general_events* get_general_events(window);
+
+		// emits both internal and external event (internal event can be filtered)
 		bool emit_event(event_code, window, const ::nana::event_arg&);
+
+		// explicitly emits internal event (internal event not to be filtered)
+		bool emit_internal_event(event_code, window, const ::nana::event_arg&);
 
 		class enum_widgets_function_base
 		{
@@ -165,16 +183,23 @@ namespace API
 		};
 	}//end namespace detail
 
+	///Sets languages
+	/**
+	 * Specifies the languages in order to make the program display multi-languages correctly
+	 * Under Windows, the pragram can display multi-languages correctly, so this function is useless for Windows.
+	 */
+	void font_languages(const std::string& langs);
+
 	void exit();	    ///< close all windows in current thread
 	void exit_all();	///< close all windows
 
-	/// @brief	Searchs whether the text contains a '&' and removes the character for transforming.
-	///			If the text contains more than one '&' charachers, the others are ignored. e.g
+	/// @brief	Searches whether the text contains a '&' and removes the character for transforming.
+	///			If the text contains more than one '&' characters, the others are ignored. e.g
 	///			text = "&&a&bcd&ef", the result should be "&abcdef", shortkey = 'b', and pos = 2.
 	std::string transform_shortkey_text
 					( std::string text,      ///< the text is transformed
 					  wchar_t &shortkey,     ///<  the character which indicates a short key.
-					  std::string::size_type *skpos ///< retrives the shortkey position if it is not a null_ptr;
+					  std::string::size_type *skpos ///< retrieves the shortkey position if it is not a null_ptr;
 					);
 	bool register_shortkey(window, unsigned long);
 	void unregister_shortkey(window);
@@ -212,13 +237,7 @@ namespace API
 	window	root(native_window_type);                     ///< Retrieves the native window of a Nana.GUI window.
 
 	void fullscreen(window, bool);
-	bool enabled_double_click(window, bool);
 
-#ifndef WIDGET_FRAME_DEPRECATED
-	bool insert_frame(window frame, native_window_type);
-	native_window_type frame_container(window frame);
-	native_window_type frame_element(window frame, unsigned index);
-#endif
 	void close_window(window);
 	void show_window(window, bool show);                  ///< Sets a window visible state.
 	void restore_window(window);
@@ -226,6 +245,7 @@ namespace API
 	bool visible(window);
 	window	get_parent_window(window);
 	window	get_owner_window(window);
+
 	bool	set_parent_window(window, window new_parent);
 
 	template<typename Widget=::nana::widget>
@@ -238,6 +258,19 @@ namespace API
 		if (nullptr == general_evt)
 			throw std::invalid_argument("API::events(): bad parameter window handle, no events object or invalid window handle.");
 
+#ifdef __cpp_if_constexpr
+		if constexpr(std::is_same_v<event_type, ::nana::general_events>)
+		{
+			return *general_evt;
+		}
+		else
+		{
+			auto * widget_evt = dynamic_cast<event_type*>(general_evt);
+			if (nullptr == widget_evt)
+				throw std::invalid_argument("API::events(): bad template parameter Widget, the widget type and window handle do not match.");
+			return *widget_evt;
+		}
+#else
 		if (std::is_same<::nana::general_events, event_type>::value)
 			return *static_cast<event_type*>(general_evt);
 
@@ -245,12 +278,19 @@ namespace API
 		if (nullptr == widget_evt)
 			throw std::invalid_argument("API::events(): bad template parameter Widget, the widget type and window handle do not match.");
 		return *widget_evt;
+#endif
 	}
 
 	template<typename EventArg, typename std::enable_if<std::is_base_of< ::nana::event_arg, EventArg>::value>::type* = nullptr>
 	bool emit_event(event_code evt_code, window wd, const EventArg& arg)
 	{
 		return detail::emit_event(evt_code, wd, arg);
+	}
+
+	template<typename EventArg, typename std::enable_if<std::is_base_of< ::nana::event_arg, EventArg>::value>::type* = nullptr>
+	bool emit_internal_event(event_code evt_code, window wd, const EventArg& arg)
+	{
+		return detail::emit_internal_event(evt_code, wd, arg);
 	}
 
 	void umake_event(event_handle);
@@ -265,6 +305,19 @@ namespace API
 		if (nullptr == wdg_colors)
 			throw std::invalid_argument("API::scheme(): bad parameter window handle, no events object or invalid window handle.");
 
+#ifdef __cpp_if_constexpr
+		if constexpr(std::is_same<::nana::widget_geometrics, scheme_type>::value)
+		{
+			return *static_cast<scheme_type*>(wdg_colors);
+		}
+		else
+		{
+			auto * comp_wdg_colors = dynamic_cast<scheme_type*>(wdg_colors);
+			if (nullptr == comp_wdg_colors)
+				throw std::invalid_argument("API::scheme(): bad template parameter Widget, the widget type and window handle do not match.");
+			return *comp_wdg_colors;
+		}
+#else
 		if (std::is_same<::nana::widget_geometrics, scheme_type>::value)
 			return *static_cast<scheme_type*>(wdg_colors);
 
@@ -272,6 +325,7 @@ namespace API
 		if (nullptr == comp_wdg_colors)
 			throw std::invalid_argument("API::scheme(): bad template parameter Widget, the widget type and window handle do not match.");
 		return *comp_wdg_colors;
+#endif
 	}
 
 	point window_position(window);
@@ -288,6 +342,8 @@ namespace API
 	void window_size(window, const size&);
 	size window_outline_size(window);
 	void window_outline_size(window, const size&);
+
+	::std::optional<rectangle> window_rectangle(window);
 	bool get_window_rectangle(window, rectangle&);
 	bool track_window_size(window, const size&, bool true_for_max);   ///< Sets the minimum or maximum tracking size of a window.
 	void window_enabled(window, bool);
@@ -295,11 +351,11 @@ namespace API
 
 	/// Refresh the window and display it immediately calling the refresh function of its drawer_trigger.
 	/*
-	 * The drawer::refresh() will be called. If the currently state is lazy_refrsh, the window is delayed to update the graphics until an event is finished.
+	 * The drawer::refresh() will be called. If the current state is lazy_refrsh, the window is delayed to update the graphics until an event is finished.
 	 * @param window_handle A handle to the window to be refreshed.
 	 */
 	void refresh_window(window window_handle);
-	void refresh_window_tree(window);      ///< Refreshes the specified window and all its children windows, then display it immediately
+	void refresh_window_tree(window);      ///< Refreshes the specified window and all its children windows, then displays it immediately
 	void update_window(window);            ///< Copies the off-screen buffer to the screen for immediate display.
 
 	void window_caption(window, const std::string& title_utf8);
@@ -339,7 +395,7 @@ namespace API
 	/// Blocks the execution and other windows' messages until the specified window is closed.
 	void modal_window(window);
 
-	/// Blocks the execution until the specified window is closesd.
+	/// Blocks the execution until the specified window is closed.
 	void wait_for(window);
 
 	color fgcolor(window);
@@ -369,8 +425,8 @@ namespace API
 	/// Enables or disables a window to receive a key_char event for pressing TAB key.
 	/*
 	 * @param window_handle A handle to the window to catch TAB key through key_char event.
-	 * @param enable Indicates whether to enable or disable catch of TAB key. If this parameter is *true*, the window is
-	 * received a key_char when pressing TAB key, and the input focus is not changed. If this parameter is *false*, the
+	 * @param enable Indicates whether to enable or disable catch of TAB key. If this parameter is *true*, the window
+	 * receives a key_char event when pressing TAB key, and the input focus is not changed. If this parameter is *false*, the
 	 * input focus is changed to the next tabstop window.
 	 */
 	void eat_tabstop(window window_handle, bool enable);
@@ -383,9 +439,10 @@ namespace API
 	 */
 	window move_tabstop(window window_handle, bool forward);
 
-	/// Sets the window active state. If a window active state is false, the window will not obtain the focus when a mouse clicks on it wich will be obteined by take_if_has_active_false.
+	/// Sets the window active state. If a window active state is false, the window will not obtain the focus when a mouse clicks on it which will be obtained by take_if_has_active_false.
 	void take_active(window, bool has_active, window take_if_has_active_false);
 
+	/// Copies the graphics of a specified to a new graphics object.
 	bool window_graphics(window, nana::paint::graphics&);
 	bool root_graphics(window, nana::paint::graphics&);
 	bool get_visual_rectangle(window, nana::rectangle&);
@@ -409,7 +466,7 @@ namespace API
 	bool ignore_mouse_focus(window, bool ignore);	///< Enables/disables the mouse focus, it returns the previous state
 	bool ignore_mouse_focus(window);				///< Determines whether the mouse focus is enabled
 
-	void at_safe_place(window, std::function<void()>);
+	void at_safe_place(window, ::std::function<void()>);
 
 	/// Returns a widget content extent size
 	/**
@@ -420,7 +477,11 @@ namespace API
 	 * @return if optional has a value, the first size indicates the content extent, the second size indicates the size of
 	 * widget by the content extent. 
 	 */
-	optional<std::pair<::nana::size, ::nana::size>> content_extent(window wd, unsigned limited_px, bool limit_width);
+	::std::optional<std::pair<::nana::size, ::nana::size>> content_extent(window wd, unsigned limited_px, bool limit_width);
+
+	unsigned screen_dpi(bool x_requested);
+
+	dragdrop_status window_dragdrop_status(::nana::window);
 }//end namespace API
 
 }//end namespace nana

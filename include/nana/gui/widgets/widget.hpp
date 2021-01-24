@@ -1,13 +1,13 @@
 /**
  *	The fundamental widget class implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0. 
  *	(See accompanying file LICENSE_1_0.txt or copy at 
  *	http://www.boost.org/LICENSE_1_0.txt)
  *
- *	@file: nana/gui/widgets/widget.hpp
+ *	@file nana/gui/widgets/widget.hpp
  */
 
 #ifndef NANA_GUI_WIDGET_HPP
@@ -48,15 +48,15 @@ namespace nana
 		widget() = default;
 
 		virtual ~widget() = default;
-		virtual window handle() const = 0;			///< Returns the handle of window, returns 0 if window is not created.
-		bool empty() const;							///< Determines whether the manipulator is handling a window.
+		virtual window handle() const = 0;		///< Returns the handle of window, returns 0 if window is not created.
+		bool empty() const;						///< Determines whether the manipulator is handling a window.
 		void close();
 
 		window parent() const;
 
-		::std::string caption() const throw();
-		::std::wstring caption_wstring() const throw();
-		native_string_type caption_native() const throw();
+		::std::string caption() const noexcept;
+		::std::wstring caption_wstring() const noexcept;
+		native_string_type caption_native() const noexcept;
 
 		widget& caption(std::string utf8);
 		widget& caption(std::wstring);
@@ -82,6 +82,8 @@ namespace nana
 
 		void focus();
 		bool focused() const;
+
+		std::shared_ptr<scroll_operation_interface> scroll_operation();
 
 		void show();						///< Sets the window visible.
 		void hide();						///< Sets the window invisible.
@@ -130,13 +132,14 @@ namespace nana
 		virtual void _m_complete_creation();
 
 		virtual general_events& _m_get_general_events() const = 0;
-		virtual native_string_type _m_caption() const throw();
+		virtual native_string_type _m_caption() const noexcept;
 		virtual void _m_caption(native_string_type&&);
 		virtual nana::cursor _m_cursor() const;
 		virtual void _m_cursor(nana::cursor);
 		virtual void _m_close();
 		virtual bool _m_enabled() const;
 		virtual void _m_enabled(bool);
+		virtual std::shared_ptr<scroll_operation_interface> _m_scroll_operation();
 		virtual bool _m_show(bool);
 		virtual bool _m_visible() const;
 		virtual void _m_size(const nana::size&);
@@ -166,8 +169,17 @@ namespace nana
 		};
 	}
 
-            /// Base class of all the classes defined as a widget window. Defaultly a widget_tag
-	template<typename Category, typename DrawerTrigger, typename Events = ::nana::general_events, typename Scheme = ::nana::widget_geometrics>
+    /// Base class of all the classes defined as a widget window. Defaultly a widget_tag
+    ///
+    /// \tparam Category
+    /// \tparam DrawerTrigger must be derived from nana::drawer_trigger
+    /// \tparam Events
+    /// \tparam Scheme
+	template<typename Category,
+	         typename DrawerTrigger,
+	         typename Events = ::nana::general_events,
+	         typename Scheme = ::nana::widget_geometrics,
+			 typename = typename std::enable_if<std::is_base_of<::nana::drawer_trigger, DrawerTrigger>::value>::type>
 	class widget_object: public detail::widget_base
 	{
 	protected:
@@ -179,7 +191,9 @@ namespace nana
 		widget_object()
 			:	events_{ std::make_shared<Events>() },
 				scheme_{ API::dev::make_scheme<Scheme>() }
-		{}
+		{
+			static_assert(std::is_base_of<::nana::drawer_trigger, DrawerTrigger>::value, "The type DrawerTrigger must be derived from nana::drawer_trigger");
+		}
 
 		~widget_object()
 		{
@@ -206,7 +220,7 @@ namespace nana
 				API::dev::attach_drawer(*this, trigger_);
 				if(visible)
 					API::show_window(handle_, true);
-				
+
 				this->_m_complete_creation();
 			}
 			return (this->empty() == false);
@@ -227,6 +241,39 @@ namespace nana
 		{
 			return *scheme_;
 		}
+
+		// disables or re-enables internal handling of event within base-widget
+		void filter_event(const event_code evt_code, const bool bDisabled)
+		{
+			trigger_.filter_event(evt_code, bDisabled);
+		}
+
+		void filter_event(const std::vector<event_code> evt_codes, const bool bDisabled)
+		{
+			trigger_.filter_event(evt_codes, bDisabled);
+		}
+
+		void filter_event(const event_filter_status& evt_all_states)
+		{
+			trigger_.filter_event(evt_all_states);
+		}
+
+		void clear_filter()
+		{
+			trigger_.clear_filter();
+		}
+
+		// reads status of if event is filtered
+		bool filter_event(const event_code evt_code)
+		{
+			return trigger_.filter_event(evt_code);
+		}
+
+		event_filter_status filter_event()
+		{
+			return trigger_.filter_event();
+		}
+
 	protected:
 		DrawerTrigger& get_drawer_trigger()
 		{
@@ -254,8 +301,13 @@ namespace nana
 		std::unique_ptr<scheme_type> scheme_;
 	};//end class widget_object
 
-	        /// Base class of all the classes defined as a non-graphics-buffer widget window. The second template parameter DrawerTrigger is always ignored.\see nana::panel
-	template<typename DrawerTrigger, typename Events, typename Scheme>
+	/// Base class of all the classes defined as a non-graphics-buffer widget window.
+	///
+	/// The second template parameter DrawerTrigger is always ignored.\see nana::panel
+	/// type DrawerTrigger must be derived from nana::drawer_trigger
+	template<typename DrawerTrigger,
+	         typename Events,
+	         typename Scheme>
 	class widget_object<category::lite_widget_tag, DrawerTrigger, Events, Scheme>: public detail::widget_base
 	{
 	protected:
@@ -266,7 +318,9 @@ namespace nana
 
 		widget_object()
 			: events_{ std::make_shared<Events>() }, scheme_{ API::dev::make_scheme<scheme_type>() }
-		{}
+		{
+			static_assert(std::is_base_of<::nana::drawer_trigger, DrawerTrigger>::value, "The type DrawerTrigger must be derived from nana::drawer_trigger");
+		}
 
 		~widget_object()
 		{
@@ -318,8 +372,14 @@ namespace nana
 	};//end class widget_object
 
 
-	        /// Base class of all the classes defined as a root window. \see nana::form
-	template<typename DrawerTrigger, typename Events, typename Scheme>
+	/// Base class of all the classes defined as a root window. \see nana::form
+	///
+	/// \tparam DrawerTrigger must be derived from nana::drawer_trigger
+	/// \tparam Events
+	/// \tparam Scheme
+	template<typename DrawerTrigger,
+	         typename Events,
+	         typename Scheme>
 	class widget_object<category::root_tag, DrawerTrigger, Events, Scheme>: public detail::widget_base
 	{
 	protected:
@@ -331,10 +391,12 @@ namespace nana
 		widget_object()
 			: widget_object(nullptr, false, API::make_center(300, 150), appearance(), this)
 		{
+			static_assert(std::is_base_of<::nana::drawer_trigger, DrawerTrigger>::value, "The type DrawerTrigger must be derived from nana::drawer_trigger");
 		}
 
 		widget_object(window owner, bool nested, const rectangle& r = {}, const appearance& apr = {})
 		{
+			static_assert(std::is_base_of<::nana::drawer_trigger, DrawerTrigger>::value, "The type DrawerTrigger must be derived from nana::drawer_trigger");
 			handle_ = API::dev::create_window(owner, nested, r, apr, this);
 			_m_bind_and_attach();
 		}
@@ -456,72 +518,6 @@ namespace nana
 		std::unique_ptr<scheme_type>	scheme_;
 	};//end class widget_object<root_tag>
 
-#ifndef WIDGET_FRAME_DEPRECATED
-	           /// Base class of all the classes defined as a frame window. \see nana::frame
-	template<typename Drawer, typename Events, typename Scheme>
-	class widget_object<category::frame_tag, Drawer, Events, Scheme>: public widget{};
-
-	           /// Especialization. Base class of all the classes defined as a frame window. \see nana::frame
-	template<typename Events, typename Scheme>
-	class widget_object<category::frame_tag, int, Events, Scheme>: public detail::widget_base
-	{
-	protected:
-		typedef int drawer_trigger_t;
-	public:
-		using scheme_type = Scheme;
-		using event_type = Events;
-
-		widget_object()
-			: events_{ std::make_shared<Events>() }, scheme_{ API::dev::make_scheme<scheme_type>() }
-		{}
-
-		~widget_object()
-		{
-			API::close_window(handle());
-		}
-
-		event_type& events() const
-		{
-			return *events_;
-		}
-
-		bool create(window parent_wd, bool visible)    ///< Creates a no-size (zero-size) widget. in a widget/root window specified by parent_wd.
-		{
-			return create(parent_wd, rectangle(), visible);
-		}
-                 /// Creates in a widget/root window specified by parent_wd.
-		bool create(window parent_wd, const rectangle& r = rectangle(), bool visible = true)
-		{
-			if(parent_wd && this->empty())
-			{
-				handle_ = API::dev::create_frame(parent_wd, r, this);
-				API::dev::set_events(handle_, events_);
-				API::dev::set_scheme(handle_, scheme_.get());
-				API::show_window(handle_, visible);
-				this->_m_complete_creation();
-			}
-			return (this->empty() == false);
-		}
-
-		scheme_type& scheme() const
-		{
-			return *scheme_;
-		}
-	private:
-		virtual drawer_trigger* get_drawer_trigger()
-		{
-			return nullptr;
-		}
-
-		general_events& _m_get_general_events() const override
-		{
-			return *events_;
-		}
-	private:
-		std::shared_ptr<Events> events_;
-		std::unique_ptr<scheme_type> scheme_;
-	};//end class widget_object<category::frame_tag>
-#endif
 }//end namespace nana
 
 #include <nana/pop_ignore_diagnostic>

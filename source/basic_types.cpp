@@ -100,7 +100,7 @@ namespace nana
 	//Initializes the color with a CSS-like string
 	//contributor: BigDave(mortis2007 at hotmail co uk)
 	//date: February 3, 2015
-	//maintainor: Jinhao, extended the support of CSS-spec
+	//maintainer: Jinhao, extended the support of CSS-spec
 
 	color::color(std::string css_color)
 		: a_(1.0)
@@ -186,10 +186,12 @@ namespace nana
 				throw std::invalid_argument(excpt_what);
 			
 			std::vector<std::string> rgb;
-
+#ifdef _nana_std_has_emplace_return_type
+			auto const is_real = (rgb.emplace_back(i->str()).back() == '%');
+#else
 			rgb.emplace_back(i->str());
-
 			const bool is_real = (rgb.back().back() == '%');
+#endif
 			pat.assign(is_real ? "(\\d*\\.)?\\d+\\%" : "\\d+");
 
 			for (++i; i != end; ++i)
@@ -275,9 +277,13 @@ namespace nana
 		{
 			std::vector<std::string> rgb;
 
+#ifdef _nana_std_has_emplace_return_type
+			auto const is_real = (rgb.emplace_back(std::move(str)).back() == '%');
+#else
 			rgb.emplace_back(std::move(str));
 
 			const bool is_real = (rgb.back().back() == '%');
+#endif
 
 			for (int i = 0; i < 2; ++i)
 			{

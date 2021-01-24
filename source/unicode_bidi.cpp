@@ -1,4 +1,19 @@
+/*
+ *	Unicode Bidi-Language Implementation
+ *	Nana C++ Library(http://www.nanapro.org)
+ *	Copyright(C) 2003-2020 Jinhao(cnjinhao@hotmail.com)
+ *
+ *	Distributed under the Boost Software License, Version 1.0.
+ *	(See accompanying file LICENSE_1_0.txt or copy at
+ *	http://www.boost.org/LICENSE_1_0.txt)
+ *
+ *	@file: nana/unicode_bidi.cpp
+ *	@contributors:
+ *		glavangeorge(pr#440)
+
+ */
 #include <nana/unicode_bidi.hpp>
+#include <nana/c++defines.hpp>
 
 namespace nana
 {
@@ -591,6 +606,11 @@ namespace nana
 			return reordered;
 		}
 
+		bool unicode_bidi::is_text_right(const entity& e)
+		{
+			return ((e.bidi_char_type != unicode_bidi::bidi_char::L) && (e.level & 1));
+		}
+
 		unsigned unicode_bidi::_m_paragraph_level(const char_type * begin, const char_type * end)
 		{
 			for(const char_type* i = begin; i != end; ++i)
@@ -611,8 +631,12 @@ namespace nana
 
 		void unicode_bidi::_m_push_entity(const char_type * begin, const char_type *end, unsigned level, bidi_char bidi_char_type)
 		{
+#ifdef _nana_std_has_emplace_return_type
+			auto & e = levels_.emplace_back();
+#else
 			levels_.emplace_back();
 			auto & e = levels_.back();
+#endif
 			e.begin = begin;
 			e.end = end;
 			e.level = level;
@@ -656,7 +680,7 @@ namespace nana
 			//W1. Examine each nonspacing mark, and change the type of the NSM to the type of the previous
 			//character.
 			//W2. Search backward from each instance of a European number until the first strong type(R, L, AL, or sor) is found
-			//If an AL is found, change the type of the European Number to arbic number.
+			//If an AL is found, change the type of the European Number to Arabic number.
 			//W3. Change all ALs to R.
 
 			//The three phases could be combined as one process. Because these phases are standalone.
@@ -697,7 +721,7 @@ namespace nana
 			}
 
 
-			//W4. A single european separator between two european numbers changes to a european number.
+			//W4. A single European separator between two European numbers changes to a European number.
 			//A single common separator between two numbers of the same type changes to that type.
 			//
 			//W5. A sequence of European terminators adjacent to European numbers changes to all European numbers.
@@ -945,5 +969,75 @@ namespace nana
 	std::vector<unicode_bidi::entity> unicode_reorder(const wchar_t* text, std::size_t length)
 	{
 		return unicode_bidi{}.reorder(text, length);
+	}
+
+	enum class unicode_character_type
+	{
+		format,
+		katakana,
+		aletter,
+		midletter,
+		midnumlet,
+		midnum,
+		numeric,
+		other
+	};
+
+	//http://www.unicode.org/reports/tr29/WordBreakTest.html
+	unicode_character_type unicode_char_type(unsigned long ch)
+	{
+		if ((0x0600 <= ch && ch <= 0x0603) || (0x06DD == ch || 0x070F == ch || 0x17B4 == ch || 0x17B5 == ch) || (0x200C <= ch && ch <= 0x200F) ||
+			(0x202A <= ch && ch <= 0x202E) || (0x2060 <= ch && ch <= 0x2063) || (0x206A <= ch && ch <= 0x206F) || (0xFEFF == ch) || (0xFFF9 <= ch && ch <= 0xFFFB) ||
+			(0x1D173 <= ch && ch <= 0x1D17A) || (0xE0001 == ch) || (0xE0020 <= ch && ch <= 0xE007F))
+			return unicode_character_type::format;
+
+		if ((0x30A1 <= ch && ch <= 0x30FA) || (0x30FC <= ch && ch <= 0x30FF) || (0x31F0 <= ch && ch <= 0x31FF) || (0xFF66 <= ch && ch <= 0xFF9F))
+			return unicode_character_type::katakana;
+
+		if (('A' <= ch && ch <= 'Z') || ('a' <= ch && ch <= 'z') || (0x00AA == ch || 0x00B5 == ch || 0x00BA == ch) || (0x00C0 <= ch && ch <= 0x00D6) ||
+			(0x00D8 <= ch && ch <= 0x00F6) || (0x00F8 <= ch && ch <= 0x0236) || (0x0250 <= ch && ch <= 0x02C1) ||
+			//Hebrew
+			(0x05BB <= ch && ch <= 0x05BD) || (0x05BF == ch) || ((0x05C1 <= ch && ch <= 0x05C4) && (0x05C3 != ch)) || (0x05D0 <= ch && ch <= 0x05EA) || (0x05F0 <= ch && ch <= 0x05F3) ||
+			//Arabic
+			(0x0610 <= ch && ch <= 0x0615) || (0x0621 <= ch && ch <= 0x063A) || (0x0640 <= ch && ch <= 0x0657) || (0x066E <= ch && ch <= 0x06D3) || (0x06D5 <= ch && ch <= 0x06DC) || (0x06E1 <= ch && ch <= 0x06E8) ||
+			(0x06ED == ch || 0x06EF == ch) || (0x06FA <= ch && ch <= 0x06FC) || (0x06FF == ch)
+			)
+			return unicode_character_type::aletter;
+
+		if ('\'' == ch || 0x00AD == ch || 0x00B7 == ch || 0x05F4 == ch || 0x2019 == ch || 0x2027 == ch)
+			return unicode_character_type::midletter;
+
+		if ('.' == ch || '\\' == ch || ':' == ch)
+			return unicode_character_type::midnumlet;
+
+		if (0x2024 <= ch && ch <= 0x2026)
+			return unicode_character_type::midnum;
+
+		if (('0' <= ch && ch <= '9') || (0x0660 <= ch && ch <= 0x0669) || (0x06F0 <= ch && ch <= 0x06F9))
+			return unicode_character_type::numeric;
+
+		return unicode_character_type::other;
+	}
+
+	bool unicode_wordbreak(wchar_t left, wchar_t right)
+	{
+		auto l_type = unicode_char_type(left);
+		auto r_type = unicode_char_type(right);
+
+		switch (l_type)
+		{
+		case unicode_character_type::format:
+		case unicode_character_type::midletter:
+		case unicode_character_type::midnumlet:
+		case unicode_character_type::midnum:
+		case unicode_character_type::other:
+			return (r_type != unicode_character_type::format);
+		case unicode_character_type::katakana:
+			return !(unicode_character_type::format == r_type) || (unicode_character_type::katakana == r_type);
+		case unicode_character_type::aletter:
+		case unicode_character_type::numeric:
+			return !((unicode_character_type::format == r_type) || (unicode_character_type::aletter == r_type) || (unicode_character_type::numeric == r_type));
+		}
+		return true;
 	}
 }//end namespace nana

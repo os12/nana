@@ -1,14 +1,14 @@
-/*
+/**
  *	An Implementation of Place for Layout
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2020 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
- *	(See accompanying file LICENSE_1_0.txt or copy at
+ *	(See accompanying file LICENSE or copy at
  *	http://www.boost.org/LICENSE_1_0.txt)
  *
- *	@file: nana/gui/place.cpp
- *	@contributors:	Ariel Vina-Rodriguez
+ *	@file nana/gui/place.cpp
+ *	@contributors	Ariel Vina-Rodriguez
  *					dankan1890(PR#156)
  */
 
@@ -36,16 +36,16 @@
 
 namespace nana
 {
-	namespace place_parts
+	struct badname: place::error
 	{
-		//check the name
-		void check_field_name(const char* name)
-		{
-			if (*name && (*name != '_' && !(('a' <= *name && *name <= 'z') || ('A' <= *name && *name <= 'Z'))))
-				throw std::invalid_argument("nana.place: bad field name");
-		}
-	}//end namespace place_parts
-
+		explicit badname(  ::std::string           what,
+							const place&           plc,
+							const char*            name   = "unknown",
+							std::string::size_type pos    = std::string::npos)
+			:place::error(what + ": bad field name '" + (name ? name : "nullptr") + "'.",
+				          plc, (name ? name : "nullptr"), pos)
+		{}
+	};
 	typedef place_parts::number_t number_t;
 	typedef place_parts::repeated_array repeated_array;
 
@@ -54,18 +54,32 @@ namespace nana
 		class tokenizer
 		{
 		public:
+			/// \todo add member full_what and overrider what() in internal exeptions
+			struct error : std::invalid_argument
+			{
+				error(std::string           what,
+					  const tokenizer&      tok)
+
+					: std::invalid_argument{ what + " from tokenizer "  },
+					  pos{tok.pos()},
+					  div_str(tok.divstr_)
+				{}	
+				std::string::size_type pos;
+				std::string            div_str;
+		    };
+
 			enum class token
 			{
 				div_start, div_end, splitter,
 				identifier, dock, fit, hfit, vfit, vert, grid, number, array, reparray,
-				weight, gap, margin, arrange, variable, repeated, min_px, max_px, left, right, top, bottom, undisplayed, invisible,
+				weight, width, height, gap, margin, arrange, variable, repeated, min_px, max_px, left, right, top, bottom, undisplayed, invisible, switchable,
 				collapse, parameters,
 				equal,
 				eof, error
 			};
 
-			tokenizer(const char* p) noexcept
-				: divstr_(p), sp_(p)
+			tokenizer(const char* div_text) noexcept
+				: divstr_(div_text), sp_(div_text)
 			{}
 
 			const std::string& idstr() const noexcept
@@ -73,7 +87,7 @@ namespace nana
 				return idstr_;
 			}
 
-			const number_t& number() const
+			const number_t& number() const noexcept
 			{
 				return number_;
 			}
@@ -93,9 +107,9 @@ namespace nana
 				return parameters_;
 			}
 
-			std::size_t pos() const noexcept
+			std::string::size_type pos() const noexcept
 			{
-				return (sp_ - divstr_);
+				return static_cast<std::string::size_type>(sp_ - divstr_);
 			}
 
 			token read()
@@ -137,9 +151,13 @@ namespace nana
 						while (true)
 						{
 							sp_ = _m_eat_whitespace(sp_);
-							auto tk = read();
-							if (token::number != tk && token::variable != tk && token::repeated != tk)
-								_m_throw_error("invalid array element");
+							auto tk = read();   // try ??
+
+							if (   token::number   != tk 
+								&& token::variable != tk 
+								&& token::repeated != tk)
+
+								throw error("invalid array element. Expected a number, variable or repaet", *this);
 
 							if (!repeated)
 							{
@@ -165,7 +183,7 @@ namespace nana
 								return (repeated ? token::reparray : token::array);
 
 							if (ch != ',')
-								_m_throw_error("invalid array");
+								throw error("invalid array", *this);
 						}
 					}
 					break;
@@ -183,7 +201,7 @@ namespace nana
 						if (token::number == read())
 							parameters_.push_back(number_);
 						else
-							_m_throw_error("invalid parameter.");
+							throw error("invalid parameter. Expected a number", *this);
 
 						sp_ = _m_eat_whitespace(sp_);
 						char ch = *sp_++;
@@ -192,7 +210,7 @@ namespace nana
 							return token::parameters;
 
 						if (ch != ',')
-							_m_throw_error("invalid parameter.");
+							throw error("invalid parameter. Expected a ','", *this);
 					}
 					break;
 				case '.': case '-':
@@ -211,7 +229,7 @@ namespace nana
 						return token::number;
 					}
 					else
-						_m_throw_error("invalid character '" + std::string(1, *sp_) + "'");
+						throw error("invalid character '" + std::string(1, *sp_) + "'", *this);
 					break;
 				default:
 					if ('0' <= *sp_ && *sp_ <= '9')
@@ -235,25 +253,23 @@ namespace nana
 
 					idstr_.assign(idstart, sp_);
 
-					if ("weight" == idstr_ || "min" == idstr_ || "max" == idstr_)
+					if (    "weight" == idstr_ 
+					     || "min" == idstr_ 
+					     || "max" == idstr_
+					     || "width" == idstr_ 
+					     || "height" == idstr_
+						)
 					{
-						auto ch = idstr_[1];
+						auto c3 = idstr_[2], c1 =idstr_[0];
 						_m_attr_number_value();
-						switch (ch)
+						switch (c3)
 						{
-						case 'e': return token::weight;
-						case 'i': return token::min_px;
-						case 'a': return token::max_px;
+						case 'i': return c1=='w'? token::weight : token::height;
+						case 'n': return token::min_px;
+						case 'x': return token::max_px;
+						case 'd': return token::width;
 						}
 					}
-					else if ("dock" == idstr_)
-						return token::dock;
-					else if ("fit" == idstr_)
-						return token::fit;
-					else if ("vertical" == idstr_ || "vert" == idstr_)
-						return token::vert;
-					else if ("variable" == idstr_ || "repeated" == idstr_)
-						return ('v' == idstr_[0] ? token::variable : token::repeated);
 					else if ("arrange" == idstr_ || "hfit" == idstr_ || "vfit" == idstr_ || "gap" == idstr_)
 					{
 						auto ch = idstr_[0];
@@ -271,48 +287,78 @@ namespace nana
 					{
 						auto idstr = idstr_;
 						if (token::equal != read())
-							_m_throw_error("an equal sign is required after '" + idstr + "'");
+							throw error("an equal sign is required after '" + idstr + "'", *this);
 
 						return ('g' == idstr[0] ? token::grid : token::margin);
 					}
 					else if ("collapse" == idstr_)
 					{
 						if (token::parameters != read())
-							_m_throw_error("a parameter list is required after 'collapse'");
+							throw error("a parameter list is required after 'collapse'", *this);
 						return token::collapse;
 					}
-					else if ("left" == idstr_ || "right" == idstr_ || "top" == idstr_ || "bottom" == idstr_ || "undisplayed" == idstr_ || "invisible" == idstr_)
+					else if (!idstr_.empty())
 					{
 						switch (idstr_.front())
 						{
-						case 'l': return token::left;
-						case 'r': return token::right;
-						case 't': return token::top;
-						case 'b': return token::bottom;
-						case 'u': return token::undisplayed;
-						case 'i': return token::invisible;
+						case 'b':
+							if ("bottom" == idstr_)
+								return token::bottom;
+							break;
+						case 'd':
+							if ("dock" == idstr_)
+								return token::dock;
+							break;
+						case 'f':
+							if ("fit" == idstr_)
+								return token::fit;
+							break;
+						case 'i':
+							if ("invisible" == idstr_)
+								return token::invisible;
+							break;
+						case 'l':
+							if ("left" == idstr_)
+								return token::left;
+							break;
+						case 'r':
+							if ("repeated" == idstr_)
+								return token::repeated;
+							else if ("right" == idstr_)
+								return token::right;
+							break;
+						case 's':
+							if ("switchable" == idstr_)
+								return token::switchable;
+							break;
+						case 't':
+							if ("top" == idstr_)
+								return token::top;
+							break;
+						case 'u':
+							if ("undisplayed" == idstr_)
+								return token::undisplayed;
+							break;
+						case 'v':
+							if ("vertical" == idstr_ || "vert" == idstr_)
+								return token::vert;
+							else if ("variable" == idstr_)
+								return token::variable;
+							break;
 						}
 					}
 
 					return token::identifier;
 				}
 
-				std::string err = "an invalid character '";
-				err += *sp_;
-				err += "'";
-				_m_throw_error(err);
+				throw error("invalid character '" + std::string(1, *sp_) + "'", *this);
 				return token::error;	//Useless, just for syntax correction.
 			}
 		private:
-			void _m_throw_error(const std::string& err)
-			{
-				throw std::runtime_error("nana::place: " + err + " at " + std::to_string(static_cast<unsigned>(sp_ - divstr_)));
-			}
-
 			void _m_attr_number_value()
 			{
 				if (token::equal != read())
-					_m_throw_error("an equal sign is required after '" + idstr_ + "'");
+					throw error("an equal sign is required after '" + idstr_ + "'", *this);
 
 				auto p = _m_eat_whitespace(sp_);
 
@@ -322,7 +368,7 @@ namespace nana
 
 				auto len = _m_number(p, neg_ptr != p);
 				if (0 == len)
-					_m_throw_error("the '" + idstr_ + "' requires a number(integer or real or percent)");
+					throw error("the '" + idstr_ + "' requires a number (integer, real or percent)", *this);
 
 				sp_ += len + (p - sp_);
 			}
@@ -331,7 +377,7 @@ namespace nana
 			{
 				auto idstr = idstr_;
 				if (token::equal != read())
-					_m_throw_error("an equal sign is required after '" + idstr + "'");
+					throw error("an equal sign is required after '" + idstr + "'", *this);
 
 				sp_ = _m_eat_whitespace(sp_);
 
@@ -349,19 +395,21 @@ namespace nana
 				case token::reparray:
 					break;
 				default:
-					_m_throw_error("a (repeated) array is required after '" + idstr + "'");
+					throw error("a (repeated) array is required after '" + idstr + "'", *this);
 				}
 			}
 
 			static const char* _m_eat_whitespace(const char* sp) noexcept
 			{
-				while (*sp && !std::isgraph(*sp))
+				while (*sp && !std::isgraph(int(*sp)))
 					++sp;
 				return sp;
 			}
 
 			std::size_t _m_number(const char* sp, bool negative) noexcept
 			{
+				/// \todo use std::from_char<int>() etc.
+
 				const char* allstart = sp;
 				sp = _m_eat_whitespace(sp);
 
@@ -426,8 +474,8 @@ namespace nana
 				return 0;
 			}
 		private:
-			const char* divstr_;
-			const char* sp_;
+			const char* divstr_{};   
+			const char* sp_{};
 			std::string idstr_;
 			number_t number_;
 			std::vector<number_t> array_;
@@ -445,8 +493,7 @@ namespace nana
 	{
 		return (vert ? pos.y : pos.x);
 	}
-
-
+	
 	static bool is_idchar(int ch) noexcept
 	{
 		return ('_' == ch || std::isalnum(ch));
@@ -454,6 +501,7 @@ namespace nana
 
 	static std::size_t find_idstr(const std::string& text, const char* idstr, std::size_t off = 0)
 	{
+		if (!idstr) return text.npos;   /// ??
 		const auto len = std::strlen(idstr);
 
 		size_t pos;
@@ -470,8 +518,9 @@ namespace nana
 		return text.npos;
 	}
 
-	//Find the text bound of a field. The parameter start_pos is one of bound characters of the field whose bound will be returned
-	static std::pair<std::size_t, std::size_t> get_field_bound(const std::string& div, std::size_t start_pos)
+	//Find the text boundary of a field. The parameter start_pos is one of bound characters of the field whose bound will be returned.
+	//The boundary doesn't include the tag characters.
+	static std::pair<std::size_t, std::size_t> get_field_boundary(const std::string& div, std::size_t start_pos)
 	{
 		int depth = 0;
 		if ('<' == div[start_pos])
@@ -491,7 +540,7 @@ namespace nana
 				}
 
 				if (0 == depth)
-					return{ start_pos, pos + 1 };
+					return{ start_pos + 1, pos };
 
 				--depth;
 				off = pos + 1;
@@ -516,7 +565,7 @@ namespace nana
 				}
 
 				if (0 == depth)
-					return{ pos, start_pos + 1 };
+					return{ pos + 1, start_pos};
 
 				if (0 == pos)
 					break;
@@ -528,7 +577,8 @@ namespace nana
 		return{};
 	}
 
-	static std::pair<std::size_t, std::size_t> get_field_bound(const std::string& div, const char* idstr, int depth)
+	// Returns the bound of a specified field excluding tag characters.
+	static std::pair<std::size_t, std::size_t> get_field_boundary(const std::string& div, const char* idstr, int depth)
 	{
 		auto start_pos = find_idstr(div, idstr);
 
@@ -539,31 +589,39 @@ namespace nana
 		{
 			auto pos = div.find_last_of("<>", start_pos);
 			if (div.npos == pos)
-				return{};
+				return {0, div.length()};
 
+			start_pos = pos - 1;
 			if (div[pos] == '>')
 			{
 				++depth;
-				start_pos = pos - 1;
 				continue;
 			}
 
-			if (0 == depth)
-			{
-				start_pos = pos;
-				break;
-			}
-
 			--depth;
-			start_pos = pos - 1;
 		}
 
-		return get_field_bound(div, start_pos + 1);
+		//The second parameter is the index of a tag character
+		return get_field_boundary(div, start_pos + 1);
 	}
 
 	//struct implement
 	struct place::implement
 	{
+		/// usefull ??
+		struct error : std::invalid_argument
+		{
+			error(std::string            what,
+				  std::string            field = "unknown",
+			 	  std::string::size_type pos   = std::string::npos)
+
+				: std::invalid_argument{ what + " from place implementation " },
+				  pos{ pos },
+				  field(field.empty() ? "unnamed" : field)
+			{}
+			std::string::size_type pos;
+			std::string            field;
+		};
 		class field_gather;
 		class field_dock;
 
@@ -573,6 +631,7 @@ namespace nana
 		class div_splitter;
 		class div_dock;
 		class div_dockpane;
+		class div_switchable;
 
 		window window_handle{nullptr};
 		event_handle event_size_handle{nullptr};
@@ -597,7 +656,8 @@ namespace nana
 		void collocate();
 
 		static division * search_div_name(division* start, const std::string&) noexcept;
-		std::unique_ptr<division> scan_div(place_parts::tokenizer&);
+
+		std::unique_ptr<division> scan_div(place_parts::tokenizer&, bool implicitly_started, const std::string& ignore_duplicate = {});
 		void check_unique(const division*) const;
 
 		//connect the field/dock with div object
@@ -609,6 +669,8 @@ namespace nana
 		: public place::field_interface
 	{
 	public:
+
+        /// \todo introduce a place::implement::field_gather::error ??
 		struct element_t
 		{
 			window handle;
@@ -658,13 +720,13 @@ namespace nana
 			return nullptr;
 		}
 	private:
-		void _m_insert_widget(window wd, bool to_fasten)
+		void _m_insert_widget(window wd, bool to_fasten)  /// \todo better errors caption of failed windows, field
 		{
 			if (API::empty_window(wd))
-				throw std::invalid_argument("Place: An invalid window handle.");
+				throw place::error("Failed to insert an invalid window handle.", *place_ptr_);
 
 			if (API::get_parent_window(wd) != place_ptr_->window_handle())
-				throw std::invalid_argument("Place: the window is not a child of place bind window");
+				throw place::error("Failed to insert a window which is not a child of the place-binded window", *place_ptr_);
 
 			//Listen to destroy of a window
 			//It will delete the element and recollocate when the window destroyed.	
@@ -709,8 +771,14 @@ namespace nana
 
 		void _m_add_agent(const detail::place_agent& ag) override
 		{
+#ifdef _nana_std_has_emplace_return_type
+			this->operator<<(
+					widgets_.emplace_back(ag.create(place_ptr_->window_handle()))->handle()
+				);
+#else
 			widgets_.emplace_back(ag.create(place_ptr_->window_handle()));
 			this->operator<<(widgets_.back()->handle());
+#endif
 		}
 	public:
 		division* attached{ nullptr };
@@ -741,7 +809,8 @@ namespace nana
 	class place::implement::division
 	{
 	public:
-		enum class kind{ arrange, vertical_arrange, grid, splitter, dock, dockpane};
+		enum class kind{ arrange, vertical_arrange, grid, splitter, dock, dockpane, switchable};
+		using token = place_parts::tokenizer::token;
 
 		division(kind k, std::string&& n) noexcept
 			: kind_of_division(k),
@@ -764,17 +833,20 @@ namespace nana
 			case number_t::kind::real:
 				return static_cast<unsigned>(number.real());
 			case number_t::kind::percent:
-				adjustable_px = area_px * number.real();
 			case number_t::kind::none:
-				{
-					auto fpx = adjustable_px + precise_px;
-					auto px = static_cast<unsigned>(fpx);
-					precise_px = fpx - px;
-					return px;
-				}
 				break;
+			default:
+				return 0; //Useless
 			}
-			return 0; //Useless
+
+			if(number_t::kind::percent == number.kind_of())
+				adjustable_px = area_px * number.real() + precise_px;
+			else
+				adjustable_px += precise_px;
+
+			auto const px = static_cast<unsigned>(adjustable_px);
+			precise_px = adjustable_px - px;
+			return px;
 		}
 
 		std::pair<double, double> calc_weight_floor()
@@ -974,6 +1046,19 @@ namespace nana
 						div_next->set_display(true);
 				}
 			}
+
+			if (display)
+			{
+				//If the field is a child of switchable field, hides other child fields.
+				if (this->div_owner && (kind::switchable == this->div_owner->kind_of_division))
+				{
+					for (auto & child : this->div_owner->children)
+					{
+						if (child.get() != this)
+							child->set_display(false);
+					}
+				}
+			}
 		}
 
 		bool is_back(const division* div) const noexcept
@@ -1082,6 +1167,7 @@ namespace nana
 
 		::nana::rectangle field_area;
 		number_t weight;
+		token    weigth_type=token::weight;
 		number_t min_px, max_px;
 
 		place_parts::margin	margin;
@@ -1724,6 +1810,12 @@ namespace nana
 					{
 						grabbed_ = false;
 						this->_m_update_div(impl_->div_text);
+
+						//revise the position of splitter window.(#512)
+						//when the splitter is dragged, the place recalculates the left/right fields the weight in percentage, then update 
+						//position of the splitter field. It may cause deviation that new splitter field position is not same with the position of
+						//splitter window after dragging a bit, because the field position is calcuated with left/right fields's weights which are float-point values.
+						splitter_.move(this->field_area);
 					}
 					else if (event_code::mouse_move == arg.evt_code)
 					{
@@ -1841,7 +1933,7 @@ namespace nana
 			if (div.npos == attr_pos)
 				return;
 
-			std::size_t off = 1;
+			std::size_t off = 0;
 			while (true)
 			{
 				auto pos = div.find('<', off);
@@ -1890,8 +1982,10 @@ namespace nana
 			if (div.npos != endpos && div[endpos] == '=')
 			{
 				endpos = div.find_first_not_of(" 0123456789.%", endpos + 1);
+
+				//endpos is a npos if the div doesn't contain the boundary tags
 				if (div.npos == endpos)
-					throw std::runtime_error("please report an issue if throws");
+					endpos = div.length();
 			}
 			else
 				endpos = attr_pos + len;
@@ -1919,18 +2013,18 @@ namespace nana
 			}
 
 			//Get the bound of field div-text through reverse recursion.
-			auto bound = get_field_bound(div, name.c_str(), depth);
+			auto bound = get_field_boundary(div, name.c_str(), depth);
 			if (bound.first == bound.second)
 				return;
 
 			auto fieldstr = div.substr(bound.first, bound.second - bound.first);
-			_m_remove_attr(fieldstr, "weight");
+			_m_remove_attr(fieldstr, "weight");   /// \todo and higth, width ?
 
-			std::string::size_type tag_pos{ left ? div.find('<', bound.second + 1) : div.rfind('>', bound.first - 1) };
+			std::string::size_type tag_pos{ left ? div.find('<', bound.second + 2) : div.rfind('>', bound.first - 2) };
 			if (div.npos == tag_pos)
-				throw std::runtime_error("place report an issue if it throws");
+				throw place::implement::error("please report an issue: the splitter was unable to update division " + div, name);
 
-			auto other_bound = get_field_bound(div, tag_pos);
+			auto other_bound = get_field_boundary(div, tag_pos);
 
 			auto other_fieldstr = div.substr(other_bound.first, other_bound.second - other_bound.first);
 			_m_remove_attr(other_fieldstr, "weight");
@@ -1943,9 +2037,7 @@ namespace nana
 
 			double percent = double((left ? r_left : r_right).w()) / double(r_owner.w());
 
-			std::string weight = "weight=" + std::to_string(percent * 100) + "% ";
-
-			fieldstr.insert(1, weight);
+			fieldstr += " weight=" + std::to_string(percent * 100) + "%";
 
 			//Replaces the 'right' field before 'left' in order to make the bound consistent
 			if (left)
@@ -2531,6 +2623,41 @@ namespace nana
 		implement * const impl_;
 	};
 
+	class place::implement::div_switchable
+		: public division
+	{
+	public:
+		div_switchable(std::string && name, implement*) noexcept:
+			division(kind::switchable, std::move(name))
+		{}
+	private:
+		void collocate(window wd) override
+		{
+			division * div = nullptr;
+			for (auto & child : children)
+			{
+				if (child->display)
+				{
+					div = child.get();
+					div->field_area = this->margin_area();
+					div->collocate(wd);
+					break;
+				}
+			}
+
+			//Hide other child fields.
+			rectangle empty_r{ this->margin_area().position() , size{ 0, 0 } };
+			for (auto & child : children)
+			{
+				if (child.get() != div)
+				{
+					child->field_area = empty_r;
+					child->collocate(wd);
+				}
+			}
+		}
+	};
+
 	place::implement::~implement()
 	{
 		API::umake_event(event_size_handle);
@@ -2574,7 +2701,7 @@ namespace nana
 					}
 				}
 
-				//Collocate doesn't sync the visiblity of fastened windows.
+				//Collocate doesn't sync the visibility of fastened windows.
 				//This is a feature that allows tabbar panels to be fastened to a same field, the collocate()
 				//shouldn't break the visibility of panels that are maintained by tabbar.
 				field.second->visible(is_show, false);
@@ -2611,15 +2738,17 @@ namespace nana
 			return static_cast<int>(arg.real());
 
 		const char* pos_strs[] = { "1st", "2nd", "3rd", "4th" };
-		throw std::invalid_argument("nana.place: the type of the " + std::string{pos_strs[pos]} +"th parameter for collapse should be integer.");
+		throw place_parts::tokenizer::error("the type of the " + std::string{pos_strs[pos]} +" parameter for collapse should be integer.", tknizer);
 	}
 
-	auto place::implement::scan_div(place_parts::tokenizer& tknizer) -> std::unique_ptr<division>
+	//implicitly_started indicates whether the field in div-text starts without < mark. 
+	//ignore_duplicate A field is allowed to have same name if its has an ancestor which name is same with ignore_duplicate.
+	auto place::implement::scan_div(place_parts::tokenizer& tknizer, bool implicitly_started, const std::string& ignore_duplicate) -> std::unique_ptr<division>
 	{
-		typedef place_parts::tokenizer::token token;
+		using token = place_parts::tokenizer::token ;
 
 		std::unique_ptr<division> div;
-		token div_type = token::eof;
+		token div_type = token::eof , weight_type=token::weight;
 		auto fit = fit_policy::none;
 		place_parts::repeated_array fit_parameters;
 
@@ -2636,68 +2765,84 @@ namespace nana
 		bool undisplayed = false;
 		bool invisible = false;
 
-		for (token tk = tknizer.read(); (tk != token::eof && tk != token::div_end); tk = tknizer.read())
-		{
-			switch (tk)
+		token tk = token::eof;
+		try {
+			for (tk = tknizer.read(); (tk != token::eof && tk != token::div_end); tk = tknizer.read())
 			{
-			case token::dock:
-				if (token::eof != div_type && token::dock != div_type)
-					throw std::invalid_argument("nana.place: conflict of div type at " + std::to_string(tknizer.pos()));
-
-				div_type = token::dock;
-				break;
-			case token::fit:
-				fit = fit_policy::both;
-				break;
-			case token::hfit:
-			case token::vfit:
-				fit = (token::hfit == tk ? fit_policy::horz : fit_policy::vert);
-				fit_parameters = tknizer.reparray();
-				break;
-			case token::splitter:
-				//Ignore the splitter when there is not a division.
-				if (!children.empty() && (division::kind::splitter != children.back()->kind_of_division))
+				switch (tk)
 				{
-					auto splitter = new div_splitter(tknizer.number(), this);
-					children.back()->div_next = splitter;
-					children.emplace_back(std::unique_ptr<division>{ splitter });
+				case token::dock:
+					if (token::eof != div_type && token::dock != div_type)
+						throw std::invalid_argument("conflict of div type -expected dock type-");
+
+					div_type = token::dock;
+					break;
+				case token::fit:
+					fit = fit_policy::both;
+					break;
+				case token::hfit:
+				case token::vfit:
+					fit = (token::hfit == tk ? fit_policy::horz : fit_policy::vert);
+					fit_parameters = tknizer.reparray();
+					break;
+				case token::splitter:
+					//Ignore the splitter when there is not a division.
+					if (!children.empty() && (division::kind::splitter != children.back()->kind_of_division))
+					{
+						auto splitter = new div_splitter(tknizer.number(), this);
+						children.back()->div_next = splitter;
+
+						//Hides the splitter if its left leaf is undisplayed.
+						if (!children.back()->display)
+							splitter->display = false;
+
+						children.emplace_back(std::unique_ptr<division>{ splitter });
+					}
+					break;
+				case token::div_start:
+				{
+					auto div = scan_div(tknizer, false, ignore_duplicate);
+					if (!children.empty())
+					{
+						//Hides the splitter if its right leaf is undisplayed.
+						if ((children.back()->kind_of_division == division::kind::splitter) && !div->display)
+							children.back()->display = false;
+
+						children.back()->div_next = div.get();
+					}
+
+					children.emplace_back(std::move(div));
 				}
 				break;
-			case token::div_start:
-			{
-				auto div = scan_div(tknizer);
-				if (!children.empty())
-					children.back()->div_next = div.get();
-
-				children.emplace_back(std::move(div));
-			}
-				break;
-			case token::vert:
-				div_type = tk;
-				break;
-			case token::grid:
-				div_type = tk;
-				switch (tknizer.read())
-				{
-				case token::number:
-					array.push_back(tknizer.number());
-					array.push_back(tknizer.number());
+				case token::switchable:
+					div_type = token::switchable;
 					break;
-				case token::array:
-					tknizer.array().swap(array);
+				case token::vert:
+					div_type = tk;
 					break;
-				case token::reparray:
-					array.push_back(tknizer.reparray().at(0));
-					array.push_back(tknizer.reparray().at(1));
+				case token::grid:
+					div_type = tk;
+					switch (tknizer.read())
+					{
+					case token::number:
+						array.push_back(tknizer.number());
+						array.push_back(tknizer.number());
+						break;
+					case token::array:
+						tknizer.array().swap(array);
+						break;
+					case token::reparray:
+						array.push_back(tknizer.reparray().at(0));
+						array.push_back(tknizer.reparray().at(1));
+						break;
+					default:
+						break;
+					}
 					break;
-                default:
-                    break;
-				}
-				break;
-			case token::collapse:
+				case token::collapse:
 				{
 					if (tknizer.parameters().size() != 4)
-						throw std::invalid_argument("nana.place: collapse requires 4 parameters.");
+						throw std::invalid_argument("collapse requires 4 parameters");
 
 					::nana::rectangle col{
 						get_parameter(tknizer, 0),
@@ -2712,7 +2857,7 @@ namespace nana
 					{
 						//Overwrite if a exist_col in collapses has same position as the col.
 						bool use_col = true;
-						for (auto & exist_col : collapses)
+						for (auto& exist_col : collapses)
 						{
 							if (exist_col.x == col.x && exist_col.y == col.y)
 							{
@@ -2726,7 +2871,7 @@ namespace nana
 					}
 				}
 				break;
-			case token::weight: case token::min_px: case token::max_px:
+				case token::weight: case token::min_px: case token::max_px: case token::width: case token::height:
 				{
 					auto n = tknizer.number();
 					//If n is the type of real, convert it to integer.
@@ -2736,63 +2881,67 @@ namespace nana
 
 					switch (tk)
 					{
-					case token::weight: weight = n; break;
+					case token::weight: weight = n; weight_type = token::weight; break;  // we could detect errors here (redefinitions and duplicates)
+					case token::width: weight = n; weight_type = token::width; break;
+					case token::height: weight = n; weight_type = token::height; break;
 					case token::min_px: min_px = n; break;
 					case token::max_px: max_px = n; break;
 					default: break;	//Useless
 					}
 				}
 				break;
-			case token::arrange:
-				arrange = tknizer.reparray();
-				break;
-			case token::gap:
-				gap = tknizer.reparray();
-				break;
-			case token::margin:
-				margin.clear();
-				switch (tknizer.read())
-				{
-				case token::number:
-					margin.push(tknizer.number(), true);
+				case token::arrange:
+					arrange = tknizer.reparray();
 					break;
-				case token::array:
-					margin.set_array(tknizer.array());
+				case token::gap:
+					gap = tknizer.reparray();
 					break;
-				case token::reparray:
-					for (std::size_t i = 0; i < 4; ++i)
+				case token::margin:
+					margin.clear();
+					switch (tknizer.read())
 					{
-						auto n = tknizer.reparray().at(i);
-						if (n.empty()) n.assign(0);
-						margin.push(n);
+					case token::number:
+						margin.push(tknizer.number(), true);
+						break;
+					case token::array:
+						margin.set_array(tknizer.array());
+						break;
+					case token::reparray:
+						for (std::size_t i = 0; i < 4; ++i)
+						{
+							auto n = tknizer.reparray().at(i);
+							if (n.empty()) n.assign(0);
+							margin.push(n);
+						}
+						break;
+					default:
+						break;
 					}
 					break;
-				default:
+				case token::identifier:
+					name = tknizer.idstr();
 					break;
+				case token::left:
+					div_dir = ::nana::direction::west; break;
+				case token::right:
+					div_dir = ::nana::direction::east; break;
+				case token::top:
+					div_dir = ::nana::direction::north; break;
+				case token::bottom:
+					div_dir = ::nana::direction::south; break;
+				case token::undisplayed:
+					undisplayed = true; break;
+				case token::invisible:
+					invisible = true; break;
+				default:	break;
 				}
-				break;
-			case token::identifier:
-				name = tknizer.idstr();
-				break;
-			case token::left:
-				div_dir = ::nana::direction::west; break;
-			case token::right:
-				div_dir = ::nana::direction::east; break;
-			case token::top:
-				div_dir = ::nana::direction::north; break;
-			case token::bottom:
-				div_dir = ::nana::direction::south; break;
-			case token::undisplayed:
-				undisplayed = true; break;
-			case token::invisible:
-				invisible = true; break;
-			default:	break;
 			}
-		}
 
-		field_gather * attached_field = nullptr;
-		if (name.size())
-		{
+			if (implicitly_started && (tk == token::div_end))
+				throw std::invalid_argument("the div-text ends prematurely");
+
+			field_gather * attached_field = nullptr;
+
 			//find the field with specified name.
 			//the field may not be created.
 			auto i = fields.find(name);
@@ -2801,131 +2950,193 @@ namespace nana
 				attached_field = i->second;
 				//the field is attached to a division, it means there is another division with same name.
 				if (attached_field->attached)
-					throw std::runtime_error("place, the name '" + name + "' is redefined.");
-			}
-		}
-
-		switch (div_type)
-		{
-		case token::eof:
-		case token::vert:
-			div.reset(new div_arrange(token::vert == div_type, std::move(name), std::move(arrange)));
-			break;
-		case token::grid:
-		{
-			std::unique_ptr<div_grid> p(new div_grid(std::move(name), std::move(arrange), std::move(collapses)));
-
-			if (array.size())
-				p->dimension.first = array[0].integer();
-
-			if (array.size() > 1)
-				p->dimension.second = array[1].integer();
-
-			if (0 == p->dimension.first)
-				p->dimension.first = 1;
-
-			if (0 == p->dimension.second)
-				p->dimension.second = 1;
-
-			p->revise_collapses();
-			div = std::move(p);
-		}
-			break;
-		case token::dock:
-			div.reset(new div_dock(std::move(name), this));
-			break;
-		default:
-			throw std::invalid_argument("nana.place: invalid division type.");
-		}
-
-		//Requirements for min/max
-		//1, min and max != negative
-		//2, max >= min
-		if (min_px.is_negative()) min_px.reset();
-		if (max_px.is_negative()) max_px.reset();
-		if ((!min_px.empty()) && (!max_px.empty()) && (min_px.get_value(100) > max_px.get_value(100)))
-		{
-			min_px.reset();
-			max_px.reset();
-		}
-
-		if (!min_px.empty())
-			div->min_px = min_px;
-
-		if (!max_px.empty())
-			div->max_px = max_px;
-
-		if ((!min_px.empty()) && (!weight.empty()) && (weight.get_value(100) < min_px.get_value(100)))
-			weight.reset();
-
-		if ((!max_px.empty()) && (!weight.empty()) && (weight.get_value(100) > max_px.get_value(100)))
-			weight.reset();
-
-		if (!weight.empty())
-			div->weight = weight;
-
-		div->gap = std::move(gap);
-
-		//attach the field to the division
-		div->field = attached_field;
-		if (attached_field)
-			attached_field->attached = div.get();
-
-		if (children.size())
-		{
-			if (division::kind::splitter == children.back()->kind_of_division)
-			{
-				children.pop_back();
-				if (children.size())
-					children.back()->div_next = nullptr;
-			}
-
-			for (auto& child : children)
-			{
-				child->div_owner = div.get();
-				if (division::kind::splitter == child->kind_of_division)
-					dynamic_cast<div_splitter&>(*child).direction(div_type != token::vert);
-			}
-
-			if (token::dock == div_type)
-			{
-				//adjust these children for dock division
-				std::vector<std::unique_ptr<division>> adjusted_children;
-				for (auto & child : children)
 				{
-					auto dockpn = new div_dockpane(std::move(child->name), this, child->dir);
-					dockpn->div_owner = child->div_owner;
-					dockpn->weight = child->weight;
-					adjusted_children.emplace_back(std::unique_ptr<division>{ dockpn });
+					//The fields are allowed to have a same name. E.g.
+					//place.div("A <B><C>");
+					//place.modify("A", "<B>");  Here the same name B must be allowed, otherwise it throws std::invalid_argument.
+
+					bool allow_same_name = false;
+					if (!ignore_duplicate.empty())
+					{
+						auto f = attached_field->attached->div_owner;
+						while (f)
+						{
+							if (f->name == ignore_duplicate)
+							{
+								allow_same_name = true;
+								break;
+							}
+
+							f = f->div_owner;
+						}
+					}
+
+					if (!allow_same_name)
+						throw std::invalid_argument("redefined field name");
+				}
+			}
+
+			token unmatch = token::width;
+			switch (div_type)
+			{
+			case token::eof:	// "horizontal" div
+			case token::vert:   // "vertical" div
+				if (token::eof == div_type)
+					unmatch = token::height;
+
+				for (auto& ch : children)
+					if (ch->weigth_type == unmatch)
+						throw std::invalid_argument("unmatch vertical-height/horizontal-width between division '"
+							+ name + "' and children division '" + ch->name);
+
+				div.reset(new div_arrange(token::vert == div_type, std::move(name), std::move(arrange)));
+				break;
+			case token::grid:
+			{
+				std::unique_ptr<div_grid> p(new div_grid(std::move(name), std::move(arrange), std::move(collapses)));
+
+				if (array.size())
+					p->dimension.first = array[0].integer();
+
+				if (array.size() > 1)
+					p->dimension.second = array[1].integer();
+
+				if (0 == p->dimension.first)
+					p->dimension.first = 1;
+
+				if (0 == p->dimension.second)
+					p->dimension.second = 1;
+
+				p->revise_collapses();
+				div = std::move(p);
+			}
+			break;
+			case token::dock:
+				div.reset(new div_dock(std::move(name), this));
+				break;
+			case token::switchable:
+				div.reset(new div_switchable(std::move(name), this));
+				break;
+			default:
+				throw std::invalid_argument("invalid division type.");
+			}
+			div->weigth_type = weight_type;
+
+			//Requirements for min/max
+			//1, min and max != negative
+			//2, max >= min
+			if (min_px.is_negative()) min_px.reset();
+			if (max_px.is_negative()) max_px.reset();
+			if ((!min_px.empty()) && (!max_px.empty()) && (min_px.get_value(100) > max_px.get_value(100)))
+			{
+				min_px.reset();
+				max_px.reset();
+			}
+
+			if (!min_px.empty())
+				div->min_px = min_px;
+
+			if (!max_px.empty())
+				div->max_px = max_px;
+
+			if ((!min_px.empty()) && (!weight.empty()) && (weight.get_value(100) < min_px.get_value(100)))
+				weight.reset();
+
+			if ((!max_px.empty()) && (!weight.empty()) && (weight.get_value(100) > max_px.get_value(100)))
+				weight.reset();
+
+			if (!weight.empty())
+				div->weight = weight;
+
+			div->gap = std::move(gap);
+
+			//attach the field to the division
+			div->field = attached_field;
+			if (attached_field)
+			{
+				//Replaces the previous div with the new div which is allowed to have a same name.
+
+				//Detaches the field from the previous div. 
+				if (attached_field->attached)
+					attached_field->attached->field = nullptr;
+
+				//Attaches new div
+				attached_field->attached = div.get();
+			}
+
+			if (children.size())
+			{
+				if (division::kind::splitter == children.back()->kind_of_division)
+				{
+					children.pop_back();
+					if (children.size())
+						children.back()->div_next = nullptr;
 				}
 
-				division * next = nullptr;
-				for (int i = static_cast<int>(adjusted_children.size()) - 1; i >= 0; --i)
+				for (auto& child : children)
 				{
-					adjusted_children[i]->div_next = next;
-					next = adjusted_children[i].get();
+					child->div_owner = div.get();
+					if (division::kind::splitter == child->kind_of_division)
+						dynamic_cast<div_splitter&>(*child).direction(div_type != token::vert);
 				}
 
-				children.swap(adjusted_children);
+				if (token::dock == div_type)
+				{
+					//adjust these children for dock division
+					std::vector<std::unique_ptr<division>> adjusted_children;
+					for (auto& child : children)
+					{
+						auto dockpn = new div_dockpane(std::move(child->name), this, child->dir);
+						dockpn->div_owner = child->div_owner;
+						dockpn->weight = child->weight;
+						adjusted_children.emplace_back(std::unique_ptr<division>{ dockpn });
+					}
+
+					division* next = nullptr;
+					for (int i = static_cast<int>(adjusted_children.size()) - 1; i >= 0; --i)
+					{
+						adjusted_children[i]->div_next = next;
+						next = adjusted_children[i].get();
+					}
+
+					children.swap(adjusted_children);
+				}
 			}
+
+			div->children.swap(children);
+			div->margin = std::move(margin);
+			div->dir = div_dir;
+
+			div->display = !undisplayed;
+			div->visible = !(undisplayed || invisible);
+			div->fit = fit;
+			div->fit_parameters = std::move(fit_parameters);
 		}
-
-		div->children.swap(children);
-		div->margin = std::move(margin);
-		div->dir = div_dir;
-
-		div->display = !undisplayed;
-		div->visible = !(undisplayed || invisible);
-		div->fit = fit;
-		div->fit_parameters = std::move(fit_parameters);
-
+		catch (place::error& ) { throw; }
+		catch (       error& ) { throw; }
+		catch (place_parts::tokenizer::error& e)
+		{
+			throw error(e.what(), name, e.pos);
+		}
+		catch (std::invalid_argument& e)
+		{
+			throw error(e.what(), name, tknizer.pos());
+		}
+		catch (std::exception& e)
+		{
+			throw error(std::string{"unexpected error: "}+e.what(), name, tknizer.pos());
+		}
+		catch (...)
+		{
+			throw error("unknow error", name, tknizer.pos());
+		}
 		return div;
 	}
 
 	void place::implement::check_unique(const division* div) const
 	{
 		//The second field_impl is useless. Reuse the map type in order to
-		//reduce the size of the generated code, becuase std::set<std::string>
+		//reduce the size of the generated code, because std::set<std::string>
 		//will create a new template class.
 		std::map<std::string, field_gather*> unique;
 		field_gather tmp(nullptr);
@@ -3055,10 +3266,11 @@ namespace nana
 	void place::bind(window wd)
 	{
 		if (impl_->window_handle)
-			throw std::runtime_error("place.bind: it has already bound to a window.");
+			throw error(" bind('"+ API::window_caption(wd).substr(0, 80)
+			                + "'): it was already bound to another window.", *this);
 
 		impl_->window_handle = wd;
-		impl_->event_size_handle = API::events(wd).resized.connect([this](const arg_resized& arg)
+		impl_->event_size_handle = API::events(wd).resized.connect_unignorable([this](const arg_resized& arg)
 		{
 			if (impl_->root_division)
 			{
@@ -3082,22 +3294,38 @@ namespace nana
 			sp->set_renderer(impl_->split_renderer, true);
 	}
 
-	void place::div(const char* s)
+	void place::div(std::string div_text)
 	{
-		place_parts::tokenizer tknizer(s);
-		impl_->disconnect();
-		auto div = impl_->scan_div(tknizer);
 		try
 		{
+			place_parts::tokenizer tknizer(div_text.c_str());
+			impl_->disconnect();
+			auto div = impl_->scan_div(tknizer, true);
 			impl_->connect(div.get());		//throws if there is a redefined name of field.
-			impl_->root_division.reset();	//clear atachments div-fields
+			impl_->root_division.reset();	//clear attachments div-fields
 			impl_->root_division.swap(div);
-			impl_->div_text.assign(s);
+			impl_->div_text.swap(div_text);
+		}
+		catch (place::error & ) { throw; }
+		catch (place::implement::error & e)
+		{
+			throw error("failed to set div('" + div_text + "'): " + e.what(), *this, e.field, e.pos);
+		}
+		catch (place_parts::tokenizer::error & e)
+		{
+			throw error("failed to set div('" + div_text + "'): " + e.what(), *this, "", e.pos);
+		}
+		catch (std::invalid_argument & e)
+		{
+			throw error("failed to set div('" + div_text + "'): " + e.what(), *this);
+		}
+		catch (std::exception & e)
+		{
+			throw error("failed to set div('"+div_text+"'): unexpected error: " +e.what(), *this );
 		}
 		catch (...)
 		{
-			//redefined a name of field
-			throw;
+			throw error("failed to set div('" + div_text + "'): unknonw error", *this);
 		}
 	}
 
@@ -3109,28 +3337,20 @@ namespace nana
 	//Contributed by dankan1890(PR#156)
 	enum class update_operation { erase = 0, insert, replace };
 
-	void update_div(std::string& div, const char* field, const char* attr, update_operation operation);
+	static void update_div(std::string& div, const char* field, const char* attr, update_operation operation);
 
 	void place::modify(const char* name, const char* div_text)
 	{
 		if (nullptr == div_text)
-			throw std::invalid_argument("nana.place: invalid div-text");
+			throw error("modify(): invalid div-text (=nullptr)", *this);
 
-		if (nullptr == name) name = "";
-
-		//check the name, it throws std::invalid_argument
-		//if name violate the naming convention.
-		place_parts::check_field_name(name);
+		if (! valid_field_name(name) )
+			throw badname("modify()", *this, name);
 
 		auto div_ptr = impl_->search_div_name(impl_->root_division.get(), name);
 		if (!div_ptr)
-		{
-			std::string what = "nana::place: field '";
-			what += name;
-			what += "' is not found.";
-
-			throw std::invalid_argument(what);
-		}
+		   throw error("modify(): field was not found", *this, name);
+		
 
 		std::unique_ptr<implement::division>* replaced = nullptr;
 
@@ -3155,7 +3375,7 @@ namespace nana
 		try
 		{
 			place_parts::tokenizer tknizer(div_text);
-			auto modified = impl_->scan_div(tknizer);
+			auto modified = impl_->scan_div(tknizer, true, name);
 			auto modified_ptr = modified.get();
 			modified_ptr->name = name;
 
@@ -3167,24 +3387,61 @@ namespace nana
 
 			modified_ptr->div_owner = div_owner;
 			modified_ptr->div_next = div_next;
+
+			if (div_owner)
+			{
+				implement::division * pv_div = nullptr;
+				//Updates the div_next of the div at front of modified one.
+				for (auto & div : div_owner->children)
+				{
+					if (div.get() == modified_ptr)
+					{
+						if (pv_div)
+							pv_div->div_next = modified_ptr;
+						break;
+					}
+					pv_div = div.get();
+				}
+			}
+		}
+		catch (place::error & ) 
+		{
+			replaced->swap(impl_->tmp_replaced);
+			throw; 
+		}
+		catch (place::implement::error & e)
+		{
+			replaced->swap(impl_->tmp_replaced);
+			throw error("failed to modify('"+std::string(name) +", "+ div_text + "'): " + e.what(), *this, e.field, e.pos);
+		}
+		catch (place_parts::tokenizer::error & e)
+		{
+			replaced->swap(impl_->tmp_replaced);
+			throw error("failed to modify('" + std::string(name) + ", " + div_text + "'): " + e.what(), *this, "", e.pos);
+		}
+		catch (std::invalid_argument & e)
+		{
+			replaced->swap(impl_->tmp_replaced);
+			throw error("failed to modify('" + std::string(name) + ", " + div_text + "'): " + e.what(), *this);
+		}
+		catch (std::exception & e)
+		{
+			replaced->swap(impl_->tmp_replaced);
+			throw error("failed to modify('" + std::string(name) + ", " + div_text + "'): unexpected error: " + e.what(), *this);
 		}
 		catch (...)
 		{
 			replaced->swap(impl_->tmp_replaced);
-			throw;
+			throw error("failed to modify('" + std::string(name) + ", " + div_text + "'): unknonw error", *this);
 		}
 	}
 
 	place::field_reference place::field(const char* name)
 	{
-		if (nullptr == name)
-			name = "";
+		if (!valid_field_name(name))
+			throw badname("field()", *this, name);
 
-		//check the name, it throws std::invalid_argument
-		//if name violate the naming convention.
-		place_parts::check_field_name(name);
-
-		//get the field with specified name, if no such field with specified name
+		//get the field with the specified name. If no such field with specified name
 		//then create one.
 		auto & p = impl_->fields[name];
 		if (nullptr == p)
@@ -3193,12 +3450,12 @@ namespace nana
 		if ((!p->attached) && impl_->root_division)
 		{
 			//search the division with the specified name,
-			//and attached the division to the field
+			//and attaches the division to the field
 			auto div = implement::search_div_name(impl_->root_division.get(), name);
 			if (div)
 			{
 				if (div->field && (div->field != p))
-					throw std::runtime_error("nana.place: unexpected error, the division attachs a unexpected field.");
+					throw error("field(): the division attaches an unexpected field", *this, name);
 
 				div->field = p;
 				p->attached = div;
@@ -3207,15 +3464,15 @@ namespace nana
 		return *p;
 	}
 
-	void update_div(std::string& div, const char* field, const char* attr, update_operation operation)
+	static void update_div(std::string& div, const char* field, const char* attr, update_operation operation)
 	{
 		const auto fieldname_pos = find_idstr(div, field);
 		if (div.npos == fieldname_pos)
 			return;
 
-		auto bound = get_field_bound(div, field, 0);
+		auto const bound = get_field_boundary(div, field, 0);
 
-		auto fieldstr = div.substr(bound.first + 1, bound.second - bound.first - 2);
+		auto fieldstr = div.substr(bound.first, bound.second - bound.first);
 		//Search the attribute
 		std::size_t pos = 0;
 		int depth = 0;
@@ -3254,30 +3511,29 @@ namespace nana
 			if (operation == update_operation::insert)
 				div.insert(fieldname_pos + std::strlen(field), " " + std::string(attr));
 			else if (operation == update_operation::replace)
-			{
-				div.erase(bound.first + 1, fieldstr.length());
-				div.insert(bound.first + 1, std::string(attr) + " " + std::string(field));
-			}
+				div.replace(bound.first, bound.second - bound.first, std::string(attr) + " " + std::string(field));
 		}
 		else
 		{
 			//There is an attribute
 			if (operation == update_operation::erase)
 			{
-				div.erase(bound.first + pos + 1, std::strlen(attr));
+				div.erase(bound.first + pos, std::strlen(attr));
 
-				if ((div[bound.first + pos] == div[bound.first + pos + 1]) && (' ' == div[bound.first + pos]))
-					div.erase(bound.first + pos, 1);
+				if (bound.first + pos > 0)
+				{
+					//erases a whitespace if there are 2 whitespaces after erasing the attr
+					if ((div[bound.first + pos] == div[bound.first + pos - 1]) && (' ' == div[bound.first + pos]))
+						div.erase(bound.first + pos, 1);
+				}
 			}
 		}
 	}
 
 	void place::field_visible(const char* name, bool vsb)
 	{
-		if (!name)	name = "";
-
-		//May throw std::invalid_argument
-		place_parts::check_field_name(name);
+		if (!valid_field_name(name))
+			throw badname("field_visible()", *this, name);
 
 		auto div = impl_->search_div_name(impl_->root_division.get(), name);
 		if (div)
@@ -3289,10 +3545,8 @@ namespace nana
 
 	bool place::field_visible(const char* name) const
 	{
-		if (!name)	name = "";
-
-		//May throw std::invalid_argument
-		place_parts::check_field_name(name);
+		if (!valid_field_name(name))
+			throw badname("field_visible()", *this, name);
 
 		auto div = impl_->search_div_name(impl_->root_division.get(), name);
 		return (div && div->visible);
@@ -3300,10 +3554,8 @@ namespace nana
 
 	void place::field_display(const char* name, bool dsp)
 	{
-		if (!name)	name = "";
-
-		//May throw std::invalid_argument
-		place_parts::check_field_name(name);
+		if (!valid_field_name(name))
+			throw badname("field_display()", *this, name);
 
 		auto div = impl_->search_div_name(impl_->root_division.get(), name);
 		if (div)
@@ -3316,10 +3568,8 @@ namespace nana
 
 	bool place::field_display(const char* name) const
 	{
-		if (!name)	name = "";
-
-		//May throw std::invalid_argument
-		place_parts::check_field_name(name);
+		if (!valid_field_name(name))
+			throw badname("field_display()", *this, name);
 
 		auto div = impl_->search_div_name(impl_->root_division.get(), name);
 		return (div && div->display);
@@ -3356,9 +3606,8 @@ namespace nana
 
 	place& place::dock(const std::string& name, std::string factory_name, std::function<std::unique_ptr<widget>(window)> factory)
 	{
-		//check the name, it throws std::invalid_argument
-		//if name violate the naming convention.
-		place_parts::check_field_name(name.data());
+		if (!valid_field_name(name.data()))
+			throw badname("dock()", *this, name.data());
 
 		auto & dock_ptr = impl_->docks[name];
 		if (!dock_ptr)
@@ -3368,7 +3617,7 @@ namespace nana
 		if (!factory_name.empty())
 		{
 			if (impl_->dock_factoris.find(factory_name) != impl_->dock_factoris.end())
-				throw std::invalid_argument("nana::place - the specified factory name(" + factory_name + ") already exists");
+				throw error("dock() - the specified factory name(" + factory_name + ") already exists", *this, name);
 
 			impl_->dock_factoris[factory_name] = dock_ptr;
 			dock_ptr->factories[factory_name] = std::move(factory);
@@ -3404,7 +3653,7 @@ namespace nana
 	{
 		auto i = impl_->dock_factoris.find(factory);
 		if (i == impl_->dock_factoris.end())
-			throw std::invalid_argument("invalid factory name(" + factory + ") of dockpane");
+			throw std::invalid_argument("nana::place::dock_create - invalid factory name(" + factory + ") of dockpane");
 
 		auto dock_ptr = i->second;
 		if (dock_ptr->attached)
@@ -3425,7 +3674,27 @@ namespace nana
 
 		return nullptr;
 	}
+	
+	place::error::error(const std::string& what,
+						const place& plc,
+						std::string field,
+						std::string::size_type pos)
+
+		: std::invalid_argument(  "from widget '" 
+		                        + API::window_caption(plc.window_handle()).substr(0,80)
+								+ "'; nana::place error "
+		                        + what 
+		                        + "' in field '" + field
+								+ (pos == std::string::npos ? "' " : "' at position " + std::to_string(pos))
+								+ " in div_text:\n" + plc.div() ),
+		base_what( what ),
+		owner_caption( API::window_caption(plc.window_handle()).substr(0,80) ),
+		div_text( plc.div() ),
+		field( field ),
+		pos( pos )
+	{}
 	//end class place
+
 }//end namespace nana
 
 #include <nana/pop_ignore_diagnostic>

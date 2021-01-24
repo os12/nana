@@ -1,13 +1,15 @@
 /**
  *	A Button Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2018 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0. 
  *	(See accompanying file LICENSE_1_0.txt or copy at 
  *	http://www.boost.org/LICENSE_1_0.txt)
  *
  *  @file: nana/gui/widgets/button.hpp
+ *	@contributor
+ *		besh81(pr#361)
  */
 
 #ifndef NANA_GUI_WIDGET_BUTTON_HPP
@@ -85,12 +87,17 @@ namespace nana{
 			typedef widget_object<category::widget_tag, drawerbase::button::trigger> base_type;
 		public:
 			button();
-			button(window, bool visible);
-			button(window, const ::std::string& caption, bool visible = true);
-			button(window, const char* caption, bool visible = true);
-			button(window, const nana::rectangle& = rectangle(), bool visible = true);
+			button(window parent, bool visible);
+			button(window parent, const ::std::string& caption, bool visible = true);
+			button(window parent, const char* caption, bool visible = true);
+			button(window parent, const nana::rectangle& = rectangle(), bool visible = true);
 
-			button& icon(const nana::paint::image&);
+			/// Shows an icon in front of caption
+			/**
+			 * @param image Icon to be shown. If image is empty, the current icon is erased from the button.
+			 * @return the reference of *this.
+			 */
+			button& icon(const nana::paint::image& image);
 			button& enable_pushed(bool);
 			bool pushed() const;
 			button& pushed(bool);

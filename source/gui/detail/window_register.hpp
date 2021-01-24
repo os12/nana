@@ -1,7 +1,7 @@
 #ifndef NANA_WINDOW_REGISTER_HEADER_INCLUDED
 #define NANA_WINDOW_REGISTER_HEADER_INCLUDED
 
-#include <nana/gui/detail/basic_window.hpp>
+#include "basic_window.hpp"
 #include <set>
 #include <vector>
 #include <algorithm> //std::find
@@ -153,7 +153,7 @@ namespace nana
 				}
 			}
 
-			void delete_trash(unsigned thread_id)
+			void delete_trash(thread_t thread_id)
 			{
 				if (0 == thread_id)
 				{

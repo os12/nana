@@ -1,7 +1,7 @@
 /*
  *	The Deploy Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2018 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -9,7 +9,7 @@
  *
  *	@file: nana/deploy.hpp
  *
- *	What follow are dependented on what defined in nana/config.hpp
+ *	What follows is dependent on what defined in nana/config.hpp
  */
 
 #ifndef NANA_DEPLOY_HPP
@@ -22,6 +22,10 @@
 #include <nana/charset.hpp>
 
 #include <stdexcept>
+
+#ifdef _nana_std_has_string_view
+#include <string_view>
+#endif
 
 namespace nana
 {
@@ -44,10 +48,15 @@ namespace nana
 
 	
 	/// Checks whether a specified text is utf8 encoding
+#ifdef _nana_std_has_string_view
+	bool is_utf8(std::string_view str);
+	void throw_not_utf8(std::string_view str);
+#else
 	bool is_utf8(const char* str, std::size_t len);
 	void throw_not_utf8(const std::string& text);
 	void throw_not_utf8(const char*, std::size_t len);
 	void throw_not_utf8(const char*);
+#endif
 
 	/// this text needed change, it needed review ??
 	bool review_utf8(const std::string& text);
@@ -56,9 +65,15 @@ namespace nana
 	bool review_utf8(std::string& text);
 
 	const std::string& to_utf8(const std::string&);
-	std::string to_utf8(const std::wstring&);
 
+#ifdef _nana_std_has_string_view
+	std::string to_utf8(std::wstring_view sv);
+	std::wstring to_wstring(std::string_view utf8_str);
+#else
+	std::string to_utf8(const std::wstring&);
 	std::wstring to_wstring(const std::string& utf8_str);
+#endif
+
 	const std::wstring& to_wstring(const std::wstring& wstr);
 	std::wstring&& to_wstring(std::wstring&& wstr);
 
@@ -102,8 +117,6 @@ namespace nana
 		return ((unsigned(red) << 16)|((unsigned(green)<<8))|blue);
 	}
 }
-
-#define NANA_RGB(a)	(((DWORD)(a) & 0xFF)<<16) |  ((DWORD)(a) & 0xFF00) | (((DWORD)(a) & 0xFF0000) >> 16 )
 
 #include <nana/pop_ignore_diagnostic>
 #endif //NANA_DEPLOY_HPP

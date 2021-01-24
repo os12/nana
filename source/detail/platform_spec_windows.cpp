@@ -1,7 +1,7 @@
 /**
  *	Platform Specification Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2016 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -31,18 +31,6 @@ namespace detail
 {
 	drawable_impl_type::drawable_impl_type()
 	{
-		pen.handle = nullptr;
-		pen.color = 0xffffffff;
-		pen.style = -1;
-		pen.width = -1;
-
-		brush.handle = nullptr;
-		brush.style = brush_spec::Solid;
-		brush.color = 0xffffffff;
-
-		round_region.handle = nullptr;
-		round_region.radius_x = round_region.radius_y = 0;
-
 		string.tab_length = 4;
 		string.tab_pixels = 0;
 		string.whitespace_pixels = 0;
@@ -52,95 +40,24 @@ namespace detail
 	{
 		::DeleteDC(context);
 		::DeleteObject(pixmap);
-		::DeleteObject(pen.handle);
-		::DeleteObject(brush.handle);
-		::DeleteObject(round_region.handle);
 	}
 
-	unsigned drawable_impl_type::get_color() const
-	{
-		return color_;
-	}
-
-	unsigned drawable_impl_type::get_text_color() const
-	{
-		return text_color_;
-	}
+#define NANA_WINDOWS_RGB(a)	(((DWORD)(a) & 0xFF)<<16) |  ((DWORD)(a) & 0xFF00) | (((DWORD)(a) & 0xFF0000) >> 16 )
 
 	void drawable_impl_type::set_color(const ::nana::color& clr)
 	{
-		color_ = (clr.px_color().value & 0xFFFFFF);
+		bgcolor_rgb = (clr.px_color().value & 0xFFFFFF);
+		bgcolor_native = NANA_WINDOWS_RGB(bgcolor_rgb);
 	}
 
 	void drawable_impl_type::set_text_color(const ::nana::color& clr)
 	{
 		auto rgb = (clr.px_color().value & 0xFFFFFF);
-		if (text_color_ != rgb)
+		if (fgcolor_rgb != rgb)
 		{
-			::SetTextColor(context, NANA_RGB(rgb));
-			text_color_ = rgb;
-		}
-	}
-
-	void drawable_impl_type::update_pen()
-	{
-		if (pen.color != color_)
-		{
-			pen.handle = ::CreatePen(PS_SOLID, 1, NANA_RGB(color_));
-			::DeleteObject(::SelectObject(context, pen.handle));
-			pen.color = color_;
-		}
-	}
-
-	void drawable_impl_type::update_brush()
-	{
-		if (brush.color != color_)
-			brush.set(context, brush.style, color_);
-	}
-
-	void drawable_impl_type::pen_spec::set(HDC context, int style, int width, unsigned clr)
-	{
-		if (this->color != clr || this->width != width || this->style != style)
-		{
-			this->color = clr;
-			this->width = width;
-			this->style = style;
-			this->handle = ::CreatePen(style, width, NANA_RGB(clr));
-			::DeleteObject(::SelectObject(context, this->handle));
-		}
-	}
-
-	void drawable_impl_type::brush_spec::set(HDC context, drawable_impl_type::brush_spec::t style, unsigned rgb)
-	{
-		if (this->color != rgb || this->style != style)
-		{
-			this->color = rgb;
-			this->style = style;
-			switch(style)
-			{
-			case brush_spec::HatchBDiagonal:
-				this->handle = ::CreateHatchBrush(HS_BDIAGONAL, NANA_RGB(rgb));
-				break;
-			case brush_spec::Solid:
-			default:
-				this->style = brush_spec::Solid;
-				this->handle = ::CreateSolidBrush(NANA_RGB(color));
-				break;
-			}
-			::DeleteObject(::SelectObject(context, this->handle));
-		}
-	}
-
-	void drawable_impl_type::round_region_spec::set(const nana::rectangle& r, unsigned radius_x, unsigned radius_y)
-	{
-		if(this->r != r || this->radius_x != radius_x || this->radius_y != radius_y)
-		{
-			if(handle)
-				::DeleteObject(this->handle);
-			this->r = r;
-			this->radius_x = radius_x;
-			this->radius_y = radius_y;
-			handle = ::CreateRoundRectRgn(r.x, r.y, r.x + static_cast<int>(r.width) + 1, r.y + static_cast<int>(r.height) + 1, static_cast<int>(radius_x + 1), static_cast<int>(radius_y + 1));
+			fgcolor_rgb = rgb;
+			fgcolor_native = NANA_WINDOWS_RGB(rgb);
+			::SetTextColor(context, fgcolor_native);
 		}
 	}
 
@@ -174,6 +91,18 @@ namespace detail
 			if(fn_unin)
 				fn_unin();
 			::FreeLibrary(ole32_);
+		}
+	}
+
+	void platform_spec::co_initializer::task_mem_free(void* p)
+	{
+		if (ole32_)
+		{
+			using CoTaskMemFree_t = void (__stdcall *)(LPVOID pv);
+
+			CoTaskMemFree_t free_fn = reinterpret_cast<CoTaskMemFree_t>(::GetProcAddress(ole32_, "CoTaskMemFree"));
+			if (free_fn)
+				free_fn(p);
 		}
 	}
 

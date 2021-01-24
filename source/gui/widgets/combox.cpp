@@ -1,7 +1,7 @@
 /*
  *	A Combox Implementation
  *	Nana C++ Library(http://www.nanapro.org)
- *	Copyright(C) 2003-2017 Jinhao(cnjinhao@hotmail.com)
+ *	Copyright(C) 2003-2019 Jinhao(cnjinhao@hotmail.com)
  *
  *	Distributed under the Boost Software License, Version 1.0.
  *	(See accompanying file LICENSE_1_0.txt or copy at
@@ -10,9 +10,9 @@
  *	@file: nana/gui/widgets/combox.cpp
  */
 
-#include <nana/gui.hpp>
-#include <nana/gui/widgets/combox.hpp>
+#include <nana/gui/compact.hpp>
 #include <nana/gui/element.hpp>
+#include <nana/gui/widgets/combox.hpp>
 #include <nana/system/dataexch.hpp>
 #include <nana/gui/widgets/float_listbox.hpp>
 #include <nana/gui/widgets/skeletons/text_editor.hpp>
@@ -90,7 +90,7 @@ namespace nana
 						: drw_{ drwimpl }
 					{}
 
-					optional<size> measure(graph_reference graph, unsigned limit_pixels, bool /*limit_width*/) const override
+					std::optional<size> measure(graph_reference graph, unsigned limit_pixels, bool /*limit_width*/) const override
 					{
 						//Combox doesn't provide a support of vfit and hfit
 						if (limit_pixels)
@@ -143,6 +143,7 @@ namespace nana
 
 					auto scheme = dynamic_cast< ::nana::widgets::skeletons::text_editor_scheme*>(API::dev::get_scheme(wd));
 					editor_ = new widgets::skeletons::text_editor(widget_->handle(), graph, scheme);
+					_m_text_area(graph.size());
 					editor_->multi_lines(false);
 					editable(false);
 					graph_ = &graph;
@@ -175,21 +176,6 @@ namespace nana
 					if (allocate_if_empty && (nullptr == any_ptr))
 						any_ptr = std::make_shared<nana::any>();
 					return any_ptr.get();
-				}
-
-				void text_area(const nana::size& s)
-				{
-					auto extension = measurer_->extension();
-
-					nana::rectangle r(2, 2, s.width > extension.width ? s.width - extension.width : 0, s.height > extension.height ? s.height - extension.height : 0);
-					if(image_enabled_)
-					{
-						unsigned place = image_pixels_ + 2;
-						r.x += place;
-						if(r.width > place)	r.width -= place;
-					}
-					editor_->text_area(r);
-					editor_->render(state_.focused);
 				}
 
 				widgets::skeletons::text_editor * editor() const
@@ -307,7 +293,7 @@ namespace nana
 
 						//The lister window closes by itself. I just take care about the destroy event.
 						//The event should be destroy rather than unload. Because the unload event is invoked while
-						//the lister is not closed, if popuping a message box, the lister will cover the message box.
+						//the lister is not closed, if pop-upping a message box, the lister will cover the message box.
 						state_.lister->events().destroy.connect_unignorable([this](const arg_destroy&)
 						{
 							state_.lister = nullptr;	//The lister closes by itself.
@@ -364,12 +350,13 @@ namespace nana
 				void draw()
 				{
 					bool enb = widget_->enabled();
-					if(editor_)
-					{
-						text_area(widget_->size());
-					}
+
+					_m_text_area(widget_->size());
+					editor_->render(state_.focused);
+					
 					_m_draw_push_button(enb);
 					_m_draw_image();
+
 				}
 
 				std::size_t the_number_of_options() const
@@ -496,6 +483,20 @@ namespace nana
 					return true;
 				}
 			private:
+				void _m_text_area(const nana::size& s)
+				{
+					auto extension = measurer_->extension();
+
+					nana::rectangle r(2, 2, s.width > extension.width ? s.width - extension.width : 0, s.height > extension.height ? s.height - extension.height : 0);
+					if (image_enabled_)
+					{
+						unsigned place = image_pixels_ + 2;
+						r.x += place;
+						if (r.width > place)	r.width -= place;
+					}
+					editor_->text_area(r);
+				}
+
 				void _m_draw_push_button(bool enabled)
 				{
 					::nana::rectangle r{graph_->size()};
@@ -675,7 +676,10 @@ namespace nana
 				{
 					auto * editor = drawer_->editor();
 					editor->mouse_pressed(arg);
-					drawer_->open_lister_if_push_button_positioned();
+
+					//Pops up the droplist only if left button is clicked
+					if(arg.is_left_button())
+						drawer_->open_lister_if_push_button_positioned();
 
 					drawer_->draw();
 					if(editor->attr().editable)
@@ -731,7 +735,6 @@ namespace nana
 				bool call_other_keys = false;
 				if(drawer_->editable())
 				{
-					bool is_move_up = false;
 					switch(arg.key)
 					{
 					case keyboard::os_arrow_left:
@@ -740,9 +743,8 @@ namespace nana
 						drawer_->editor()->reset_caret();
 						break;
 					case keyboard::os_arrow_up:
-						is_move_up = true;
 					case keyboard::os_arrow_down:
-						drawer_->move_items(is_move_up, true);
+						drawer_->move_items((keyboard::os_arrow_up == arg.key), true);
 						break;
 					default:
 						call_other_keys = true;
@@ -750,15 +752,15 @@ namespace nana
 				}
 				else
 				{
-					bool is_move_up = false;
 					switch(arg.key)
 					{
 					case keyboard::os_arrow_left:
 					case keyboard::os_arrow_up:
-						is_move_up = true;
+						drawer_->move_items(true, true);
+						break;
 					case keyboard::os_arrow_right:
 					case keyboard::os_arrow_down:
-						drawer_->move_items(is_move_up, true);
+						drawer_->move_items(false, true);
 						break;
 					default:
 						call_other_keys = true;
@@ -769,6 +771,13 @@ namespace nana
 
 				drawer_->editor()->try_refresh();
 				API::dev::lazy_refresh();
+			}
+
+			void trigger::key_ime(graph_reference, const arg_ime& arg)
+			{
+				drawer_->editor()->respond_ime(arg);
+				if (drawer_->editor()->try_refresh())
+					API::dev::lazy_refresh();
 			}
 
 			void trigger::key_char(graph_reference, const arg_keyboard& arg)
@@ -822,6 +831,14 @@ namespace nana
 				}
 
 				/// Behavior of Iterator's value_type
+#ifdef _nana_std_has_string_view
+				bool item_proxy::operator == (::std::string_view s) const
+				{
+					if (pos_ == nana::npos)
+						return false;
+					return (impl_->at(pos_).item_text == s);
+				}
+#else
 				bool item_proxy::operator == (const ::std::string& s) const
 				{
 					if (pos_ == nana::npos)
@@ -835,6 +852,7 @@ namespace nana
 						return false;
 					return (impl_->at(pos_).item_text == s);
 				}
+#endif
 
 
 				/// Behavior of Iterator
@@ -1036,7 +1054,7 @@ namespace nana
 				API::refresh_window(*this);
 		}
 
-		auto combox::_m_caption() const throw() -> native_string_type
+		auto combox::_m_caption() const noexcept -> native_string_type
 		{
 			internal_scope_guard lock;
 			auto editor = _m_impl().editor();
